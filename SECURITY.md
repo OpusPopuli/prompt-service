@@ -17,9 +17,9 @@ Opus Populi follows a "glass box behavior, black box implementation" model:
 
 ## Authentication & Authorization
 
-### API Key Authentication
+### Node API Key Authentication
 
-All prompt endpoints require a Bearer token in the `Authorization` header:
+All prompt-serving endpoints require a Bearer token in the `Authorization` header:
 
 ```
 Authorization: Bearer <API_KEY>
@@ -28,7 +28,20 @@ Authorization: Bearer <API_KEY>
 - API keys are configured via the `API_KEYS` environment variable (comma-separated)
 - Keys are validated by `ApiKeyGuard` (`src/auth/api-key.guard.ts`)
 - Invalid or missing tokens return `401 Unauthorized`
-- The API key is attached to the request context for analytics logging
+- The API key is attached to the request context for analytics logging and A/B experiment bucketing
+
+### Admin API Key Authentication
+
+Template management and experiment control endpoints require a **separate** set of admin keys:
+
+```
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
+- Admin keys are configured via the `ADMIN_API_KEYS` environment variable (comma-separated)
+- Keys are validated by `AdminKeyGuard` (`src/auth/admin-key.guard.ts`)
+- Node API keys **cannot** access admin endpoints, and admin keys **cannot** access prompt-serving endpoints
+- This separation ensures a compromised node cannot modify templates or experiments
 
 ### What is logged
 
@@ -36,6 +49,7 @@ Every prompt request logs:
 - Endpoint called (`structural-analysis`, `document-analysis`, `rag`)
 - Prompt template version served
 - API key prefix (first 8 characters + `...`) — **not the full key**
+- A/B experiment ID and variant name (if the request was part of an experiment)
 - Timestamp
 
 Full API keys are **never** written to logs or the database.
@@ -77,6 +91,15 @@ Every template change is recorded in the `prompt_version_history` table with:
 - Timestamp
 
 This creates an immutable audit trail. No version record can be deleted (enforced by the schema — no delete endpoint exists).
+
+### Experiment Audit Trail
+
+A/B experiments are fully auditable:
+- Every experiment records its creation time, activation time, and stop time
+- Each variant links to a specific version history entry (immutable reference)
+- Every prompt request logs which experiment and variant it was served under
+- Rollback to a previous version creates a **new** version entry, preserving the full history
+- Experiments can only be stopped, never deleted — the full experiment lifecycle is preserved
 
 ## Data Handling
 
@@ -164,6 +187,8 @@ In the federated Opus Populi network:
 | Threat | Mitigation |
 |--------|-----------|
 | Unauthorized prompt access | Bearer token authentication; API keys rotatable |
+| Unauthorized template modification | Separate admin API keys; node keys cannot access admin endpoints |
+| Experiment tampering | Admin-only experiment controls; immutable variant-to-version linkage |
 | Prompt scraping | Rate limiting (30 req/min per endpoint per key) |
 | Prompt tampering in transit | SHA-256 hash verification via `/prompts/verify` |
 | Node modifying prompts locally | Prompt lock verification in `prompt-client` (planned, see Issue #426) |

@@ -81,15 +81,36 @@ curl -X POST http://localhost:3100/prompts/document-analysis \
 
 ## API Endpoints
 
-All prompt endpoints require a Bearer token (`Authorization: Bearer <API_KEY>`).
+### Prompt Serving (Node API Key)
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | No | Service health check |
-| `POST` | `/prompts/structural-analysis` | Yes | Web scraping extraction prompt |
-| `POST` | `/prompts/document-analysis` | Yes | Document analysis prompt |
-| `POST` | `/prompts/rag` | Yes | RAG answer generation prompt |
-| `POST` | `/prompts/verify` | Yes | Verify a prompt hash is authentic |
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Service health check (no auth) |
+| `POST` | `/prompts/structural-analysis` | Web scraping extraction prompt |
+| `POST` | `/prompts/document-analysis` | Document analysis prompt |
+| `POST` | `/prompts/rag` | RAG answer generation prompt |
+| `POST` | `/prompts/verify` | Verify a prompt hash is authentic |
+
+### Admin: Template Management (Admin API Key)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/admin/templates` | List templates (with optional filters) |
+| `GET` | `/admin/templates/:id` | Get template with version history |
+| `POST` | `/admin/templates` | Create new template |
+| `PATCH` | `/admin/templates/:id` | Update template (auto-versions) |
+| `DELETE` | `/admin/templates/:id` | Soft-delete template |
+| `POST` | `/admin/templates/:id/rollback` | Rollback to previous version |
+
+### Admin: A/B Experiments (Admin API Key)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/admin/experiments` | Create experiment (draft) |
+| `GET` | `/admin/experiments` | List all experiments |
+| `GET` | `/admin/experiments/:id` | Get experiment details |
+| `POST` | `/admin/experiments/:id/activate` | Activate experiment |
+| `POST` | `/admin/experiments/:id/stop` | Stop experiment |
 
 Interactive API docs are available at `http://localhost:3100/api` (Swagger UI).
 
@@ -100,7 +121,9 @@ See [docs/api-reference.md](docs/api-reference.md) for full request/response sch
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `API_KEYS` | Yes | — | Comma-separated list of valid API keys |
+| `API_KEYS` | Yes | — | Comma-separated list of valid node API keys |
+| `ADMIN_API_KEYS` | Yes | — | Comma-separated list of valid admin API keys |
+| `PROMPT_TTL_SECONDS` | No | `3600` | Prompt expiry TTL in seconds (nodes must re-fetch after) |
 | `PORT` | No | `3100` | Server port |
 
 ## Scripts
@@ -124,11 +147,12 @@ See [docs/api-reference.md](docs/api-reference.md) for full request/response sch
 ```
 prompt-service/
 ├── prisma/
-│   ├── schema.prisma          # Database schema
+│   ├── schema.prisma          # Database schema (templates, versions, experiments)
 │   └── seed.ts                # Seeds all 13 prompt templates
 ├── src/
 │   ├── auth/
-│   │   └── api-key.guard.ts   # Bearer token validation
+│   │   ├── api-key.guard.ts   # Node API key validation
+│   │   └── admin-key.guard.ts # Admin API key validation
 │   ├── common/
 │   │   ├── prisma.module.ts   # Global Prisma provider
 │   │   └── prisma.service.ts  # Prisma client lifecycle
@@ -138,7 +162,16 @@ prompt-service/
 │   │   ├── dto/               # Request validation DTOs
 │   │   ├── prompts.controller.ts  # Route handlers
 │   │   ├── prompts.module.ts
-│   │   └── prompts.service.ts # Template lookup, interpolation, hashing
+│   │   └── prompts.service.ts # Template lookup, A/B resolution, interpolation, hashing
+│   ├── admin/
+│   │   ├── dto/               # Admin request DTOs (create, update, rollback, experiment)
+│   │   ├── admin.controller.ts           # Template CRUD endpoints
+│   │   ├── experiments-admin.controller.ts  # Experiment lifecycle endpoints
+│   │   ├── admin.service.ts   # Template & experiment business logic
+│   │   └── admin.module.ts
+│   ├── experiments/
+│   │   ├── experiments.service.ts   # A/B bucketing engine
+│   │   └── experiments.module.ts    # Global experiment provider
 │   ├── app.module.ts          # Root module
 │   └── main.ts                # Bootstrap + Swagger setup
 ├── docker-compose.yml         # Local dev stack

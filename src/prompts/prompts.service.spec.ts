@@ -15,13 +15,37 @@ function createMockPrisma() {
   };
 }
 
+function createMockConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    get: jest.fn((key: string, defaultValue?: unknown) => {
+      if (key in overrides) return overrides[key];
+      if (key === 'PROMPT_TTL_SECONDS') return 3600;
+      return defaultValue;
+    }),
+  };
+}
+
+function createMockExperiments() {
+  return {
+    resolveExperiment: jest.fn().mockResolvedValue(null),
+  };
+}
+
 describe('PromptsService', () => {
   let service: PromptsService;
   let prisma: ReturnType<typeof createMockPrisma>;
+  let config: ReturnType<typeof createMockConfig>;
+  let experiments: ReturnType<typeof createMockExperiments>;
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new PromptsService(prisma as never);
+    config = createMockConfig();
+    experiments = createMockExperiments();
+    service = new PromptsService(
+      prisma as never,
+      config as never,
+      experiments as never,
+    );
   });
 
   describe('getStructuralAnalysisPrompt', () => {
@@ -43,7 +67,7 @@ describe('PromptsService', () => {
       };
 
       prisma.promptTemplate.findFirst
-        .mockResolvedValueOnce(baseTemplate) // structural-analysis
+        .mockResolvedValueOnce(baseTemplate) // structural-analysis (from resolveTemplate fallback)
         .mockResolvedValueOnce(schemaTemplate); // structural-schema-propositions
       prisma.promptRequestLog.create.mockResolvedValue({});
 
@@ -62,6 +86,8 @@ describe('PromptsService', () => {
       expect(result.promptText).toContain('<div>test</div>');
       expect(result.promptHash).toBeDefined();
       expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+      expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
     });
 
     it('should include hints when provided', async () => {
@@ -164,6 +190,7 @@ describe('PromptsService', () => {
       expect(result.promptText).toContain('We the people...');
       expect(result.promptText).toContain('Respond with valid JSON only.');
       expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
     });
 
     it('should fall back to generic when specific type not found', async () => {
@@ -231,6 +258,7 @@ describe('PromptsService', () => {
       expect(result.promptText).toContain('The sky is blue.');
       expect(result.promptText).toContain('What color is the sky?');
       expect(result.promptVersion).toBe('v3');
+      expect(result.expiresAt).toBeDefined();
     });
   });
 
@@ -260,8 +288,141 @@ describe('PromptsService', () => {
     });
   });
 
-  describe('request logging', () => {
-    it('should log prompt requests', async () => {
+  describe('TTL / expiresAt', () => {
+    it('should set expiresAt based on PROMPT_TTL_SECONDS config', async () => {
+      const customConfig = createMockConfig({ PROMPT_TTL_SECONDS: 7200 });
+      const customService = new PromptsService(
+        prisma as never,
+        customConfig as never,
+        experiments as never,
+      );
+
+      const template = {
+        id: '1',
+        name: 'rag',
+        templateText: '{{CONTEXT}} {{QUERY}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const before = Date.now();
+      const result = await customService.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+      );
+      const after = Date.now();
+
+      const expiresMs = new Date(result.expiresAt).getTime();
+      // Should expire ~7200 seconds from now
+      expect(expiresMs).toBeGreaterThanOrEqual(before + 7200 * 1000);
+      expect(expiresMs).toBeLessThanOrEqual(after + 7200 * 1000);
+    });
+
+    it('should default to 3600 seconds TTL', async () => {
+      const defaultConfig = createMockConfig();
+      const defaultService = new PromptsService(
+        prisma as never,
+        defaultConfig as never,
+        experiments as never,
+      );
+
+      const template = {
+        id: '1',
+        name: 'rag',
+        templateText: '{{CONTEXT}} {{QUERY}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const before = Date.now();
+      const result = await defaultService.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+      );
+
+      const expiresMs = new Date(result.expiresAt).getTime();
+      expect(expiresMs).toBeGreaterThanOrEqual(before + 3600 * 1000);
+    });
+  });
+
+  describe('A/B testing integration', () => {
+    it('should serve experiment variant when active experiment exists', async () => {
+      experiments.resolveExperiment.mockResolvedValue({
+        templateText: 'Experiment version: {{CONTEXT}} {{QUERY}}',
+        version: 2,
+        templateHash: 'exp-hash',
+        experimentId: 'exp-1',
+        variantName: 'variant_a',
+      });
+
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+      );
+
+      expect(result.promptText).toContain('Experiment version: ctx q');
+      expect(result.promptVersion).toBe('v2');
+    });
+
+    it('should fall back to default when no active experiment', async () => {
+      experiments.resolveExperiment.mockResolvedValue(null);
+
+      const template = {
+        id: '1',
+        name: 'rag',
+        templateText: 'Default: {{CONTEXT}} {{QUERY}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+      );
+
+      expect(result.promptText).toContain('Default: ctx q');
+      expect(result.promptVersion).toBe('v1');
+    });
+
+    it('should log experimentId and variantName when experiment is active', async () => {
+      experiments.resolveExperiment.mockResolvedValue({
+        templateText: '{{CONTEXT}} {{QUERY}}',
+        version: 2,
+        templateHash: 'hash',
+        experimentId: 'exp-1',
+        variantName: 'control',
+      });
+
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'my-secret-key-123',
+      );
+
+      expect(prisma.promptRequestLog.create).toHaveBeenCalledWith({
+        data: {
+          endpoint: 'rag',
+          promptVersion: 2,
+          apiKeyPrefix: 'my-secre...',
+          experimentId: 'exp-1',
+          variantName: 'control',
+        },
+      });
+    });
+
+    it('should log null experiment fields when no experiment is active', async () => {
       const template = {
         id: '1',
         name: 'rag',
@@ -283,6 +444,8 @@ describe('PromptsService', () => {
           endpoint: 'rag',
           promptVersion: 1,
           apiKeyPrefix: 'my-secre...',
+          experimentId: null,
+          variantName: null,
         },
       });
     });

@@ -28,6 +28,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/prompt_service_test?schema=public
       API_KEYS: test-key-1,test-key-2
+      ADMIN_API_KEYS: admin-test-key-1
+      PROMPT_TTL_SECONDS: 3600
 
     steps:
       - uses: actions/checkout@v4

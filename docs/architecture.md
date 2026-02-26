@@ -16,7 +16,8 @@ The Prompt Service is a standalone NestJS microservice that serves AI prompt tem
 │  Response contract (shared):     │     │  Same contract:                  │
 │  { promptText,                   │     │  { promptText,                   │
 │    promptHash,                   │     │    promptHash,                   │
-│    promptVersion }               │     │    promptVersion }               │
+│    promptVersion,                │     │    promptVersion,                │
+│    expiresAt }                   │     │    expiresAt }                   │
 └──────────────────────────────────┘     └──────────────────────────────────┘
 ```
 
@@ -42,10 +43,15 @@ AppModule
 ├── ConfigModule (global)           # Environment variables
 ├── ThrottlerModule (global)        # Rate limiting: 60 req/min default
 ├── PrismaModule (global)           # Database connection lifecycle
+├── ExperimentsModule (global)      # A/B testing bucketing engine
 ├── HealthModule                    # GET /health
-└── PromptsModule                   # All prompt endpoints
-    ├── PromptsController           # Route handlers + auth guards
-    └── PromptsService              # Template lookup, interpolation, hashing, logging
+├── PromptsModule                   # Prompt serving endpoints
+│   ├── PromptsController           # Route handlers + node API key guards
+│   └── PromptsService              # Template lookup, A/B resolution, interpolation, hashing
+└── AdminModule                     # Template & experiment management
+    ├── AdminController             # CRUD for templates (admin key auth)
+    ├── ExperimentsAdminController  # Experiment lifecycle (admin key auth)
+    └── AdminService                # Template CRUD, rollback, experiment management
 ```
 
 ## Database Schema
@@ -81,9 +87,36 @@ Immutable audit trail of every template change.
 | `change_note` | String? | What changed and why |
 | `created_at` | Timestamptz | When this version was created |
 
+### `experiments`
+
+A/B testing experiments that serve different prompt versions to different nodes.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `name` | String (unique) | Experiment identifier |
+| `description` | String? | Human-readable purpose |
+| `template_id` | UUID | FK to `prompt_templates` — template being tested |
+| `status` | String | `draft`, `active`, or `stopped` |
+| `created_at` | Timestamptz | Creation timestamp |
+| `updated_at` | Timestamptz | Last modification timestamp |
+| `stopped_at` | Timestamptz? | When the experiment was stopped |
+
+### `experiment_variants`
+
+Variant definitions within an experiment. Traffic percentages must sum to 100.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `experiment_id` | UUID | FK to `experiments` |
+| `name` | String | Variant name (e.g., "control", "variant_a") |
+| `version_id` | UUID | FK to `prompt_version_history` — which template version to serve |
+| `traffic_pct` | Int | Traffic percentage (0-100) |
+
 ### `prompt_request_logs`
 
-Analytics table tracking prompt usage.
+Analytics table tracking prompt usage, including A/B experiment participation.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -91,6 +124,8 @@ Analytics table tracking prompt usage.
 | `endpoint` | String | Which endpoint was called |
 | `prompt_version` | Int | Template version served |
 | `api_key_prefix` | String | First 8 chars of API key (for identification without exposure) |
+| `experiment_id` | String? | Experiment ID if request was part of an A/B test |
+| `variant_name` | String? | Variant name served (e.g., "control", "variant_a") |
 | `created_at` | Timestamptz | Request timestamp |
 
 ## Request Flow
@@ -112,16 +147,20 @@ Analytics table tracking prompt usage.
    → 400 if invalid
 
 5. PromptsService.getDocumentAnalysisPrompt():
-   a. Look up template: "document-analysis-petition"
+   a. resolveTemplate("document-analysis-petition", apiKey):
+      i.  Check for active A/B experiment on this template
+      ii. If experiment active → bucket API key to variant → use variant's template text
+      iii.If no experiment → look up default template
       → If not found, fall back to "document-analysis-generic"
       → If neither found, throw 404
-   b. Look up base instructions: "document-analysis-base-instructions"
+   b. Look up base instructions: "document-analysis-base-instructions" (always default, never A/B tested)
    c. Interpolate {{TEXT}} variable into template
    d. Append base instructions
    e. Compute SHA-256 hash of raw template text (before interpolation)
-   f. Log request to prompt_request_logs
+   f. Compute expiresAt from PROMPT_TTL_SECONDS config
+   g. Log request to prompt_request_logs (including experimentId and variantName if applicable)
 
-6. Return { promptText, promptHash, promptVersion }
+6. Return { promptText, promptHash, promptVersion, expiresAt }
 ```
 
 ### Verification Request
@@ -167,6 +206,52 @@ The Prompt Service uses a template fallback chain for type-specific lookups:
 3. If neither found, return `404 Not Found`
 
 This allows adding new document types by simply seeding a new template — no code changes required.
+
+## A/B Testing (Experiments)
+
+The service supports A/B testing of prompt templates via the experiments system. This allows controlled rollout of prompt changes by serving different template versions to different nodes.
+
+### Bucketing Algorithm
+
+Nodes are deterministically assigned to variants using SHA-256 hashing:
+
+```
+bucket = parseInt(SHA256(apiKey + ":" + experimentId)[0..7], 16) % 100
+```
+
+Properties:
+- **Deterministic**: The same node (API key) always gets the same variant for a given experiment
+- **Uniform**: SHA-256 distributes evenly across 0-99 buckets
+- **Independent**: Different experiments produce different bucket assignments for the same node
+
+### Experiment Lifecycle
+
+```
+draft → active → stopped
+```
+
+- **Draft**: Experiment is configured but not serving traffic. Variants and traffic splits can be adjusted.
+- **Active**: Experiment is live. Only one experiment may be active per template at a time. Prompt requests for the associated template are routed through the bucketing engine.
+- **Stopped**: Experiment is concluded. The template reverts to serving its default (latest) version.
+
+### Data Flow
+
+```
+1. Node requests prompt for "document-analysis-petition"
+2. ExperimentsService checks for active experiment on this template
+3. If experiment active:
+   a. Compute bucket from SHA256(apiKey + ":" + experimentId)
+   b. Walk variants by cumulative trafficPct until bucket < cumulative
+   c. Return variant's version entry (templateText, version, hash)
+4. If no experiment: use default template (latest active version)
+5. Log request with experimentId + variantName for analytics
+```
+
+### Design Decisions
+
+- **Only primary templates are A/B tested**: Auxiliary templates (schema descriptions, base instructions) always use the default version. This keeps prompt composition predictable.
+- **Separate admin controller**: Experiment endpoints use `/admin/experiments` (not nested under `/admin/templates/:id`) to avoid route parameter conflicts.
+- **No auto-winner selection**: Experiments must be manually stopped and evaluated. Automatic winner selection is out of scope for the initial implementation.
 
 Note: The `prompt-client` in the main repo has its own 3-tier fallback:
 1. Remote service (this service) → 2. Local database → 3. Hardcoded fallbacks

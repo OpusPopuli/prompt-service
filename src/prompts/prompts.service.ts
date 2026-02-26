@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../common/prisma.service';
+import { ExperimentsService } from '../experiments/experiments.service';
 import { StructuralAnalysisDto } from './dto/structural-analysis.dto';
 import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
@@ -9,6 +11,7 @@ export interface PromptServiceResponse {
   promptText: string;
   promptHash: string;
   promptVersion: string;
+  expiresAt: string;
 }
 
 export interface VerifyResult {
@@ -16,18 +19,31 @@ export interface VerifyResult {
   templateName?: string;
 }
 
+interface ResolvedTemplate {
+  templateText: string;
+  version: number;
+  name: string;
+  experimentId?: string;
+  variantName?: string;
+}
+
 @Injectable()
 export class PromptsService {
   private readonly logger = new Logger(PromptsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly experiments: ExperimentsService,
+  ) {}
 
   async getStructuralAnalysisPrompt(
     dto: StructuralAnalysisDto,
     apiKey: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.getActiveTemplate('structural-analysis');
+    const template = await this.resolveTemplate('structural-analysis', apiKey);
 
+    // Schema/auxiliary templates always use default (no A/B)
     const schemaTemplate = await this.getActiveTemplate(
       `structural-schema-${dto.dataType}`,
       'structural-schema-default',
@@ -51,7 +67,13 @@ export class PromptsService {
     const response = this.buildResponse(template);
     response.promptText = promptText;
 
-    await this.logRequest('structural-analysis', template.version, apiKey);
+    await this.logRequest(
+      'structural-analysis',
+      template.version,
+      apiKey,
+      template.experimentId,
+      template.variantName,
+    );
 
     return response;
   }
@@ -60,11 +82,13 @@ export class PromptsService {
     dto: DocumentAnalysisDto,
     apiKey: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.getActiveTemplate(
+    const template = await this.resolveTemplate(
       `document-analysis-${dto.documentType}`,
+      apiKey,
       'document-analysis-generic',
     );
 
+    // Base instructions always use default (no A/B)
     const baseInstructions = await this.getActiveTemplate(
       'document-analysis-base-instructions',
     );
@@ -77,7 +101,13 @@ export class PromptsService {
     const response = this.buildResponse(template);
     response.promptText = promptText;
 
-    await this.logRequest('document-analysis', template.version, apiKey);
+    await this.logRequest(
+      'document-analysis',
+      template.version,
+      apiKey,
+      template.experimentId,
+      template.variantName,
+    );
 
     return response;
   }
@@ -86,7 +116,7 @@ export class PromptsService {
     dto: RagDto,
     apiKey: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.getActiveTemplate('rag');
+    const template = await this.resolveTemplate('rag', apiKey);
 
     const promptText = this.interpolate(template.templateText, {
       CONTEXT: dto.context,
@@ -96,7 +126,13 @@ export class PromptsService {
     const response = this.buildResponse(template);
     response.promptText = promptText;
 
-    await this.logRequest('rag', template.version, apiKey);
+    await this.logRequest(
+      'rag',
+      template.version,
+      apiKey,
+      template.experimentId,
+      template.variantName,
+    );
 
     return response;
   }
@@ -120,10 +156,34 @@ export class PromptsService {
     return { valid: false };
   }
 
+  private async resolveTemplate(
+    name: string,
+    apiKey: string,
+    fallbackName?: string,
+  ): Promise<ResolvedTemplate> {
+    // Check for active A/B experiment first
+    const experimentResult = await this.experiments.resolveExperiment(
+      name,
+      apiKey,
+    );
+    if (experimentResult) {
+      return {
+        templateText: experimentResult.templateText,
+        version: experimentResult.version,
+        name,
+        experimentId: experimentResult.experimentId,
+        variantName: experimentResult.variantName,
+      };
+    }
+
+    // Fall back to default active template
+    return this.getActiveTemplate(name, fallbackName);
+  }
+
   private async getActiveTemplate(
     name: string,
     fallbackName?: string,
-  ): Promise<{ templateText: string; version: number; name: string }> {
+  ): Promise<ResolvedTemplate> {
     let template = await this.prisma.promptTemplate.findFirst({
       where: { name, isActive: true },
     });
@@ -160,10 +220,14 @@ export class PromptsService {
     templateText: string;
     version: number;
   }): PromptServiceResponse {
+    const ttlSeconds = this.config.get<number>('PROMPT_TTL_SECONDS', 3600);
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+
     return {
       promptText: '',
       promptHash: this.hash(template.templateText),
       promptVersion: `v${template.version}`,
+      expiresAt,
     };
   }
 
@@ -171,6 +235,8 @@ export class PromptsService {
     endpoint: string,
     version: number,
     apiKey: string,
+    experimentId?: string,
+    variantName?: string,
   ): Promise<void> {
     try {
       await this.prisma.promptRequestLog.create({
@@ -178,6 +244,8 @@ export class PromptsService {
           endpoint,
           promptVersion: version,
           apiKeyPrefix: apiKey.slice(0, 8) + '...',
+          experimentId: experimentId ?? null,
+          variantName: variantName ?? null,
         },
       });
     } catch (err) {
