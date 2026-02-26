@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PromptTemplate {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  category     String   // structural_analysis, document_analysis, rag
+  description  String
+  templateText String   @map("template_text") @db.Text
+  variables    String[] @default([])
+  version      Int      @default(1)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  versionHistory PromptVersionHistory[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("prompt_templates")
+}
+
+model PromptVersionHistory {
+  id             String   @id @default(uuid())
+  templateId     String   @map("template_id")
+  version        Int
+  templateText   String   @map("template_text") @db.Text
+  templateHash   String   @map("template_hash")
+  changeNote     String?  @map("change_note")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  template PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([templateHash])
+  @@map("prompt_version_history")
+}
+
+model PromptRequestLog {
+  id            String   @id @default(uuid())
+  endpoint      String
+  promptVersion Int      @map("prompt_version")
+  apiKeyPrefix  String   @map("api_key_prefix")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([endpoint])
+  @@index([apiKeyPrefix])
+  @@index([createdAt])
+  @@map("prompt_request_logs")
+}

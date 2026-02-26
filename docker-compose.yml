@@ -1,0 +1,31 @@
+services:
+  prompt-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: prompt_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5433:5432'
+    volumes:
+      - prompt-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prompt-service:
+    build: .
+    ports:
+      - '3100:3100'
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@prompt-db:5432/prompt_service?schema=public
+      API_KEYS: dev-key-1,dev-key-2
+      PORT: 3100
+    depends_on:
+      prompt-db:
+        condition: service_healthy
+
+volumes:
+  prompt-db-data:
