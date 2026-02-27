@@ -2,6 +2,7 @@ import { adminPost, adminDelete } from './http-client';
 import { getDb } from './db-helpers';
 
 let createdTemplateIds: string[] = [];
+let createdNodeIds: string[] = [];
 
 export async function createTestTemplate(
   overrides: Record<string, unknown> = {},
@@ -36,4 +37,28 @@ export async function cleanupTestTemplates() {
     await adminDelete(`/admin/templates/${id}`).catch(() => {});
   }
   createdTemplateIds = [];
+}
+
+export async function createTestNode(overrides: Record<string, unknown> = {}) {
+  const defaults = {
+    name: `test-node-${Date.now()}`,
+    region: 'ca',
+  };
+
+  const res = await adminPost('/admin/nodes', {
+    body: { ...defaults, ...overrides },
+  });
+
+  if (res.status === 201) {
+    createdNodeIds.push(res.body.id);
+  }
+
+  return res;
+}
+
+export async function cleanupTestNodes() {
+  for (const id of createdNodeIds) {
+    await adminDelete(`/admin/nodes/${id}`).catch(() => {});
+  }
+  createdNodeIds = [];
 }

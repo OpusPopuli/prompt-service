@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PromptsController } from './prompts.controller';
 import { PromptsService } from './prompts.service';
+import { PrismaService } from '../common/prisma.service';
 
 describe('PromptsController', () => {
   let controller: PromptsController;
@@ -23,6 +24,10 @@ describe('PromptsController', () => {
         {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('test-key') },
+        },
+        {
+          provide: PrismaService,
+          useValue: { node: { findFirst: jest.fn() } },
         },
       ],
     }).compile();
