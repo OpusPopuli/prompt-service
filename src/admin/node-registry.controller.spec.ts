@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NodeRegistryController } from './node-registry.controller';
 import { NodeRegistryService } from './node-registry.service';
 
@@ -153,5 +154,63 @@ describe('NodeRegistryController', () => {
 
     expect(service.deleteNode).toHaveBeenCalledWith('1');
     expect(result).toEqual(expected);
+  });
+
+  describe('error propagation', () => {
+    it('should propagate NotFoundException from getNode', async () => {
+      jest
+        .spyOn(service, 'getNode')
+        .mockRejectedValue(new NotFoundException('Node not-found not found'));
+
+      await expect(controller.getById('not-found')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should propagate NotFoundException from certifyNode', async () => {
+      jest
+        .spyOn(service, 'certifyNode')
+        .mockRejectedValue(new NotFoundException());
+
+      await expect(
+        controller.certify('not-found', {}, { adminKey: 'admin-key-12345' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should propagate BadRequestException from certifyNode on decertified node', async () => {
+      jest
+        .spyOn(service, 'certifyNode')
+        .mockRejectedValue(
+          new BadRequestException('Cannot certify a decertified node'),
+        );
+
+      await expect(
+        controller.certify('1', {}, { adminKey: 'admin-key-12345' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should propagate NotFoundException from decertifyNode', async () => {
+      jest
+        .spyOn(service, 'decertifyNode')
+        .mockRejectedValue(new NotFoundException());
+
+      await expect(
+        controller.decertify(
+          'not-found',
+          { reason: 'test' },
+          { adminKey: 'admin-key-12345' },
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should propagate NotFoundException from deleteNode', async () => {
+      jest
+        .spyOn(service, 'deleteNode')
+        .mockRejectedValue(new NotFoundException());
+
+      await expect(controller.delete('not-found')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 });

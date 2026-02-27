@@ -1,5 +1,13 @@
-import { adminGet, adminPost, adminPatch, adminDelete, post } from '../utils';
+import {
+  adminGet,
+  adminPost,
+  adminPatch,
+  adminDelete,
+  post,
+  get,
+} from '../utils';
 import { createTestNode, cleanupTestNodes } from '../utils/fixtures';
+import { INVALID_KEY } from '../utils/config';
 
 describe('Admin Node Registry (integration)', () => {
   afterAll(async () => {
@@ -263,6 +271,91 @@ describe('Admin Node Registry (integration)', () => {
       expect(res.body.byStatus).toBeDefined();
       expect(Array.isArray(res.body.expiringIn30Days)).toBe(true);
       expect(Array.isArray(res.body.recentlyRegistered)).toBe(true);
+    });
+  });
+
+  describe('Access control', () => {
+    it('should reject a pending node API key on prompt endpoints', async () => {
+      const createRes = await createTestNode({
+        name: `integ-pending-access-${Date.now()}`,
+      });
+      expect(createRes.status).toBe(201);
+      const pendingKey = createRes.body.apiKey;
+
+      // Pending node key should not work
+      const promptRes = await post('/prompts/rag', {
+        headers: { Authorization: `Bearer ${pendingKey}` },
+        body: { context: 'Test', query: 'Test' },
+      });
+      expect(promptRes.status).toBe(401);
+    });
+
+    it('should reject requests with invalid API key', async () => {
+      const promptRes = await post('/prompts/rag', {
+        headers: { Authorization: `Bearer ${INVALID_KEY}` },
+        body: { context: 'Test', query: 'Test' },
+      });
+      expect(promptRes.status).toBe(401);
+    });
+
+    it('should reject admin endpoints without admin key', async () => {
+      const res = await get('/admin/nodes');
+      expect(res.status).toBe(401);
+    });
+
+    it('should reject certifying a decertified node via certify (must use recertify)', async () => {
+      const createRes = await createTestNode({
+        name: `integ-certify-decert-${Date.now()}`,
+      });
+      expect(createRes.status).toBe(201);
+
+      // Certify then decertify
+      await adminPost(`/admin/nodes/${createRes.body.id}/certify`, {
+        body: {},
+      });
+      await adminPost(`/admin/nodes/${createRes.body.id}/decertify`, {
+        body: { reason: 'Test' },
+      });
+
+      // Try to certify again (should fail — must use recertify)
+      const certifyRes = await adminPost(
+        `/admin/nodes/${createRes.body.id}/certify`,
+        { body: {} },
+      );
+      expect(certifyRes.status).toBe(400);
+    });
+  });
+
+  describe('Audit trail', () => {
+    it('should record all lifecycle events in audit log', async () => {
+      const createRes = await createTestNode({
+        name: `integ-audit-${Date.now()}`,
+      });
+      expect(createRes.status).toBe(201);
+      const nodeId = createRes.body.id;
+
+      // Certify → decertify → recertify
+      await adminPost(`/admin/nodes/${nodeId}/certify`, {
+        body: { reason: 'Initial cert' },
+      });
+      await adminPost(`/admin/nodes/${nodeId}/decertify`, {
+        body: { reason: 'Suspension' },
+      });
+      await adminPost(`/admin/nodes/${nodeId}/recertify`, {
+        body: { reason: 'Reinstated' },
+      });
+
+      const getRes = await adminGet(`/admin/nodes/${nodeId}`);
+      expect(getRes.status).toBe(200);
+
+      const actions = getRes.body.auditLogs.map(
+        (log: { action: string }) => log.action,
+      );
+      expect(actions).toContain('registered');
+      expect(actions).toContain('certified');
+      expect(actions).toContain('decertified');
+      expect(actions).toContain('recertified');
+      expect(getRes.body.auditLogs.length).toBe(4);
     });
   });
 

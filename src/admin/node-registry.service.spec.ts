@@ -86,6 +86,36 @@ describe('NodeRegistryService', () => {
     });
   });
 
+  describe('generateApiKey', () => {
+    it('should generate a 64-character hex string', async () => {
+      const dto = { name: 'node-key-test', region: 'ca' };
+      prisma._tx.node.create.mockResolvedValue({
+        id: '1',
+        ...dto,
+        apiKey: '',
+        status: 'pending',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      await service.registerNode(dto, 'admin...');
+
+      const createCall = prisma._tx.node.create.mock.calls[0][0];
+      expect(createCall.data.apiKey).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('should generate unique keys on each call', async () => {
+      prisma._tx.node.create.mockResolvedValue({ id: '1' });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      await service.registerNode({ name: 'a', region: 'ca' }, 'admin...');
+      await service.registerNode({ name: 'b', region: 'ca' }, 'admin...');
+
+      const key1 = prisma._tx.node.create.mock.calls[0][0].data.apiKey;
+      const key2 = prisma._tx.node.create.mock.calls[1][0].data.apiKey;
+      expect(key1).not.toBe(key2);
+    });
+  });
+
   describe('listNodes', () => {
     it('should return all nodes when no filters', async () => {
       const nodes = [{ id: '1', name: 'node-a' }];
@@ -118,6 +148,17 @@ describe('NodeRegistryService', () => {
 
       expect(prisma.node.findMany).toHaveBeenCalledWith({
         where: { status: 'certified' },
+        orderBy: { name: 'asc' },
+      });
+    });
+
+    it('should filter by region and status together', async () => {
+      prisma.node.findMany.mockResolvedValue([]);
+
+      await service.listNodes({ region: 'ca', status: 'certified' });
+
+      expect(prisma.node.findMany).toHaveBeenCalledWith({
+        where: { region: 'ca', status: 'certified' },
         orderBy: { name: 'asc' },
       });
     });
@@ -171,6 +212,18 @@ describe('NodeRegistryService', () => {
       });
     });
 
+    it('should update only publicKey when other fields are undefined', async () => {
+      prisma.node.findUnique.mockResolvedValue({ id: '1' });
+      prisma.node.update.mockResolvedValue({ id: '1', publicKey: 'new-pk' });
+
+      await service.updateNode('1', { publicKey: 'new-pk' });
+
+      expect(prisma.node.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { publicKey: 'new-pk' },
+      });
+    });
+
     it('should throw NotFoundException when not found', async () => {
       prisma.node.findUnique.mockResolvedValue(null);
 
@@ -215,6 +268,45 @@ describe('NodeRegistryService', () => {
           performedBy: 'admin...',
         },
       });
+    });
+
+    it('should use default 365-day expiration when not specified', async () => {
+      prisma._tx.node.findUnique.mockResolvedValue({
+        id: '1',
+        status: 'pending',
+      });
+      prisma._tx.node.update.mockResolvedValue({
+        id: '1',
+        status: 'certified',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      await service.certifyNode('1', {}, 'admin...');
+
+      const updateCall = prisma._tx.node.update.mock.calls[0][0];
+      const expiresAt = new Date(updateCall.data.certificationExpiresAt);
+      const now = new Date();
+      const diffDays = Math.round(
+        (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      expect(diffDays).toBeGreaterThanOrEqual(364);
+      expect(diffDays).toBeLessThanOrEqual(366);
+    });
+
+    it('should allow re-certifying an already certified node', async () => {
+      prisma._tx.node.findUnique.mockResolvedValue({
+        id: '1',
+        status: 'certified',
+      });
+      prisma._tx.node.update.mockResolvedValue({
+        id: '1',
+        status: 'certified',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      const result = await service.certifyNode('1', {}, 'admin...');
+
+      expect(result.status).toBe('certified');
     });
 
     it('should reject certifying a decertified node', async () => {
@@ -309,6 +401,14 @@ describe('NodeRegistryService', () => {
         },
       });
     });
+
+    it('should throw NotFoundException when not found', async () => {
+      prisma._tx.node.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.recertifyNode('nonexistent', {}, 'admin...'),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('rotateApiKey', () => {
@@ -389,6 +489,19 @@ describe('NodeRegistryService', () => {
       expect(result.recentlyRegistered).toEqual([
         { id: '2', name: 'new-node' },
       ]);
+    });
+
+    it('should handle empty database gracefully', async () => {
+      prisma.node.count.mockResolvedValue(0);
+      prisma.node.groupBy.mockResolvedValue([]);
+      prisma.node.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      const result = await service.getHealthDashboard();
+
+      expect(result.totalNodes).toBe(0);
+      expect(result.byStatus).toEqual({});
+      expect(result.expiringIn30Days).toEqual([]);
+      expect(result.recentlyRegistered).toEqual([]);
     });
   });
 });

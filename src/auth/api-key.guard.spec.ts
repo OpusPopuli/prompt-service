@@ -66,6 +66,44 @@ describe('ApiKeyGuard', () => {
     expect(request.nodeId).toBeUndefined();
   });
 
+  it('should reject Bearer token with no key after space', async () => {
+    mockPrisma.node.findFirst.mockResolvedValue(null);
+    const { ctx } = createMockContext('Bearer ');
+    await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('should handle empty API_KEYS config gracefully', async () => {
+    const configService = {
+      get: jest.fn().mockReturnValue(''),
+    } as unknown as ConfigService;
+    const emptyGuard = new ApiKeyGuard(
+      configService,
+      createMockPrisma() as never,
+    );
+
+    const { ctx } = createMockContext('Bearer some-key');
+    // Should fall through to DB lookup since no env keys configured
+    await expect(emptyGuard.canActivate(ctx)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('should handle API_KEYS with multiple colons (key contains colon)', async () => {
+    const configService = {
+      get: jest.fn().mockReturnValue('ca:key:with:colons'),
+    } as unknown as ConfigService;
+    const colonGuard = new ApiKeyGuard(
+      configService,
+      createMockPrisma() as never,
+    );
+
+    const { ctx, request } = createMockContext('Bearer key:with:colons');
+    await colonGuard.canActivate(ctx);
+
+    expect(request.apiKey).toBe('key:with:colons');
+    expect(request.region).toBe('ca');
+  });
+
   it('should default to unknown region when no colon in key entry', async () => {
     const configService = {
       get: jest.fn().mockReturnValue('legacy-key'),
@@ -129,6 +167,35 @@ describe('ApiKeyGuard', () => {
           certificationExpiresAt: { gt: expect.any(Date) },
         },
       });
+    });
+
+    it('should reject expired node certification (DB returns null for expired)', async () => {
+      // When certificationExpiresAt is in the past, findFirst returns null
+      mockPrisma.node.findFirst.mockResolvedValue(null);
+      const { ctx } = createMockContext('Bearer expired-node-key');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should reject pending node key (DB returns null for non-certified)', async () => {
+      // When status is 'pending', findFirst returns null
+      mockPrisma.node.findFirst.mockResolvedValue(null);
+      const { ctx } = createMockContext('Bearer pending-node-key');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should not set nodeId for env var keys', async () => {
+      const { ctx, request } = createMockContext('Bearer key-3');
+
+      await guard.canActivate(ctx);
+
+      expect(request.nodeId).toBeUndefined();
+      expect(request.region).toBe('ny');
     });
   });
 });
