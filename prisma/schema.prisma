@@ -20,6 +20,7 @@ model PromptTemplate {
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   versionHistory PromptVersionHistory[]
+  experiments    Experiment[]
 
   @@index([category])
   @@index([isActive])
@@ -35,7 +36,8 @@ model PromptVersionHistory {
   changeNote     String?  @map("change_note")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  template PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template           PromptTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  experimentVariants ExperimentVariant[]
 
   @@index([templateId])
   @@index([templateHash])
@@ -47,10 +49,45 @@ model PromptRequestLog {
   endpoint      String
   promptVersion Int      @map("prompt_version")
   apiKeyPrefix  String   @map("api_key_prefix")
+  experimentId  String?  @map("experiment_id")
+  variantName   String?  @map("variant_name")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([endpoint])
   @@index([apiKeyPrefix])
   @@index([createdAt])
   @@map("prompt_request_logs")
+}
+
+model Experiment {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  templateId  String    @map("template_id")
+  status      String    @default("draft") // draft, active, stopped
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  stoppedAt   DateTime? @map("stopped_at") @db.Timestamptz
+
+  template PromptTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  variants ExperimentVariant[]
+
+  @@index([templateId])
+  @@index([status])
+  @@map("experiments")
+}
+
+model ExperimentVariant {
+  id           String   @id @default(uuid())
+  experimentId String   @map("experiment_id")
+  name         String   // e.g., "control", "variant_a"
+  versionId    String   @map("version_id")
+  trafficPct   Int      @map("traffic_pct") // 0-100, must sum to 100 per experiment
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  experiment   Experiment           @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  versionEntry PromptVersionHistory @relation(fields: [versionId], references: [id])
+
+  @@index([experimentId])
+  @@map("experiment_variants")
 }
