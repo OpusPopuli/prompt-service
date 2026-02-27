@@ -17,9 +17,7 @@ describe('ApiKeyGuard', () => {
 
   beforeEach(() => {
     const configService = {
-      get: jest
-        .fn()
-        .mockReturnValue('us-east:key-1,us-west:key-2,eu-west:key-3'),
+      get: jest.fn().mockReturnValue('ca:key-1,tx:key-2,ny:key-3'),
     } as unknown as ConfigService;
     guard = new ApiKeyGuard(configService);
   });
@@ -54,7 +52,7 @@ describe('ApiKeyGuard', () => {
 
     guard.canActivate(ctx);
     expect(request.apiKey).toBe('key-2');
-    expect(request.region).toBe('us-west');
+    expect(request.region).toBe('tx');
   });
 
   it('should default to unknown region when no colon in key entry', () => {

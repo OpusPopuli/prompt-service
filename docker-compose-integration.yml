@@ -19,7 +19,7 @@ services:
       - '3101:3100'
     environment:
       DATABASE_URL: postgresql://postgres:postgres@prompt-db-test:5432/prompt_service_test?schema=public
-      API_KEYS: us-east:test-api-key-1,us-west:test-api-key-2
+      API_KEYS: ca:test-api-key-1,tx:test-api-key-2
       ADMIN_API_KEYS: admin-test-key-1
       PROMPT_TTL_SECONDS: 300
       PORT: 3100

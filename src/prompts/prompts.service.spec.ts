@@ -78,7 +78,7 @@ describe('PromptsService', () => {
           html: '<div>test</div>',
         },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('propositions');
@@ -120,7 +120,7 @@ describe('PromptsService', () => {
           html: '<table></table>',
         },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('Use table rows');
@@ -156,7 +156,7 @@ describe('PromptsService', () => {
           html: '<div></div>',
         },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('Extract all fields');
@@ -188,7 +188,7 @@ describe('PromptsService', () => {
       const result = await service.getDocumentAnalysisPrompt(
         { documentType: 'petition', text: 'We the people...' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('We the people...');
@@ -222,7 +222,7 @@ describe('PromptsService', () => {
       const result = await service.getDocumentAnalysisPrompt(
         { documentType: 'unknown', text: 'Some text' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('Generic: Some text');
@@ -237,7 +237,7 @@ describe('PromptsService', () => {
         service.getDocumentAnalysisPrompt(
           { documentType: 'nonexistent', text: 'text' },
           'test-key',
-          'us-east',
+          'ca',
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -259,7 +259,7 @@ describe('PromptsService', () => {
       const result = await service.getRagPrompt(
         { context: 'The sky is blue.', query: 'What color is the sky?' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('The sky is blue.');
@@ -319,7 +319,7 @@ describe('PromptsService', () => {
       const result = await customService.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'test-key',
-        'us-east',
+        'ca',
       );
       const after = Date.now();
 
@@ -352,7 +352,7 @@ describe('PromptsService', () => {
       const result = await defaultService.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       const expiresMs = new Date(result.expiresAt).getTime();
@@ -375,7 +375,7 @@ describe('PromptsService', () => {
       const result = await service.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('Experiment version: ctx q');
@@ -399,7 +399,7 @@ describe('PromptsService', () => {
       const result = await service.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'test-key',
-        'us-east',
+        'ca',
       );
 
       expect(result.promptText).toContain('Default: ctx q');
@@ -420,7 +420,7 @@ describe('PromptsService', () => {
       await service.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'my-secret-key-123',
-        'us-west',
+        'tx',
       );
 
       expect(prisma.promptRequestLog.create).toHaveBeenCalledWith({
@@ -428,7 +428,7 @@ describe('PromptsService', () => {
           endpoint: 'rag',
           promptVersion: 2,
           apiKeyPrefix: 'my-secre...',
-          region: 'us-west',
+          region: 'tx',
           experimentId: 'exp-1',
           variantName: 'control',
         },
@@ -450,7 +450,7 @@ describe('PromptsService', () => {
       await service.getRagPrompt(
         { context: 'ctx', query: 'q' },
         'my-secret-key-123',
-        'us-west',
+        'tx',
       );
 
       expect(prisma.promptRequestLog.create).toHaveBeenCalledWith({
@@ -458,7 +458,7 @@ describe('PromptsService', () => {
           endpoint: 'rag',
           promptVersion: 1,
           apiKeyPrefix: 'my-secre...',
-          region: 'us-west',
+          region: 'tx',
           experimentId: null,
           variantName: null,
         },

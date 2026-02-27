@@ -50,13 +50,13 @@ describe('PromptsController', () => {
 
     const result = await controller.structuralAnalysis(dto, {
       apiKey: 'key',
-      region: 'us-east',
+      region: 'ca',
     });
 
     expect(service.getStructuralAnalysisPrompt).toHaveBeenCalledWith(
       dto,
       'key',
-      'us-east',
+      'ca',
     );
     expect(result).toEqual(expected);
   });
@@ -76,13 +76,13 @@ describe('PromptsController', () => {
 
     const result = await controller.documentAnalysis(dto, {
       apiKey: 'key',
-      region: 'us-east',
+      region: 'ca',
     });
 
     expect(service.getDocumentAnalysisPrompt).toHaveBeenCalledWith(
       dto,
       'key',
-      'us-east',
+      'ca',
     );
     expect(result).toEqual(expected);
   });
@@ -100,10 +100,10 @@ describe('PromptsController', () => {
 
     const result = await controller.rag(dto, {
       apiKey: 'key',
-      region: 'us-east',
+      region: 'ca',
     });
 
-    expect(service.getRagPrompt).toHaveBeenCalledWith(dto, 'key', 'us-east');
+    expect(service.getRagPrompt).toHaveBeenCalledWith(dto, 'key', 'ca');
     expect(result).toEqual(expected);
   });
 
