@@ -17,7 +17,9 @@ describe('ApiKeyGuard', () => {
 
   beforeEach(() => {
     const configService = {
-      get: jest.fn().mockReturnValue('key-1,key-2,key-3'),
+      get: jest
+        .fn()
+        .mockReturnValue('us-east:key-1,us-west:key-2,eu-west:key-3'),
     } as unknown as ConfigService;
     guard = new ApiKeyGuard(configService);
   });
@@ -42,7 +44,7 @@ describe('ApiKeyGuard', () => {
     expect(() => guard.canActivate(ctx)).toThrow(UnauthorizedException);
   });
 
-  it('should attach apiKey to request on success', () => {
+  it('should attach apiKey and region to request on success', () => {
     const request: Record<string, unknown> = {
       headers: { authorization: 'Bearer key-2' },
     };
@@ -52,5 +54,24 @@ describe('ApiKeyGuard', () => {
 
     guard.canActivate(ctx);
     expect(request.apiKey).toBe('key-2');
+    expect(request.region).toBe('us-west');
+  });
+
+  it('should default to unknown region when no colon in key entry', () => {
+    const configService = {
+      get: jest.fn().mockReturnValue('legacy-key'),
+    } as unknown as ConfigService;
+    const legacyGuard = new ApiKeyGuard(configService);
+
+    const request: Record<string, unknown> = {
+      headers: { authorization: 'Bearer legacy-key' },
+    };
+    const ctx = {
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+
+    legacyGuard.canActivate(ctx);
+    expect(request.apiKey).toBe('legacy-key');
+    expect(request.region).toBe('unknown');
   });
 });

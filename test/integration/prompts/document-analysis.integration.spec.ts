@@ -1,6 +1,6 @@
 import { apiPost } from '../utils';
 import { getDb } from '../utils/db-helpers';
-import { API_KEY } from '../utils/config';
+import { API_KEY, API_KEY_REGION } from '../utils/config';
 
 describe('Document Analysis Prompt (integration)', () => {
   it('should render petition prompt with civic analyst instruction', async () => {
@@ -73,5 +73,6 @@ describe('Document Analysis Prompt (integration)', () => {
 
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(logs[0].apiKeyPrefix).toBe(API_KEY.slice(0, 8) + '...');
+    expect(logs[0].region).toBe(API_KEY_REGION);
   });
 });
