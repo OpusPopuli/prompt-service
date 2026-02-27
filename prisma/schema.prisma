@@ -93,3 +93,39 @@ model ExperimentVariant {
   @@index([experimentId])
   @@map("experiment_variants")
 }
+
+model Node {
+  id                     String    @id @default(uuid())
+  name                   String    @unique
+  region                 String
+  publicKey              String?   @map("public_key")
+  apiKey                 String    @unique @map("api_key")
+  status                 String    @default("pending") // pending, certified, decertified, expired
+  certifiedAt            DateTime? @map("certified_at") @db.Timestamptz
+  certificationExpiresAt DateTime? @map("certification_expires_at") @db.Timestamptz
+  decertifiedAt          DateTime? @map("decertified_at") @db.Timestamptz
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  auditLogs NodeAuditLog[]
+
+  @@index([region])
+  @@index([status])
+  @@index([apiKey])
+  @@map("nodes")
+}
+
+model NodeAuditLog {
+  id          String   @id @default(uuid())
+  nodeId      String   @map("node_id")
+  action      String   // registered, certified, decertified, recertified, key_rotated
+  reason      String?
+  performedBy String   @map("performed_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([action])
+  @@map("node_audit_logs")
+}
