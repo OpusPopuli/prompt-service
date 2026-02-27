@@ -40,6 +40,7 @@ export class PromptsService {
   async getStructuralAnalysisPrompt(
     dto: StructuralAnalysisDto,
     apiKey: string,
+    region: string,
   ): Promise<PromptServiceResponse> {
     const template = await this.resolveTemplate('structural-analysis', apiKey);
 
@@ -71,6 +72,7 @@ export class PromptsService {
       'structural-analysis',
       template.version,
       apiKey,
+      region,
       template.experimentId,
       template.variantName,
     );
@@ -81,6 +83,7 @@ export class PromptsService {
   async getDocumentAnalysisPrompt(
     dto: DocumentAnalysisDto,
     apiKey: string,
+    region: string,
   ): Promise<PromptServiceResponse> {
     const template = await this.resolveTemplate(
       `document-analysis-${dto.documentType}`,
@@ -105,6 +108,7 @@ export class PromptsService {
       'document-analysis',
       template.version,
       apiKey,
+      region,
       template.experimentId,
       template.variantName,
     );
@@ -115,6 +119,7 @@ export class PromptsService {
   async getRagPrompt(
     dto: RagDto,
     apiKey: string,
+    region: string,
   ): Promise<PromptServiceResponse> {
     const template = await this.resolveTemplate('rag', apiKey);
 
@@ -130,6 +135,7 @@ export class PromptsService {
       'rag',
       template.version,
       apiKey,
+      region,
       template.experimentId,
       template.variantName,
     );
@@ -235,6 +241,7 @@ export class PromptsService {
     endpoint: string,
     version: number,
     apiKey: string,
+    region: string,
     experimentId?: string,
     variantName?: string,
   ): Promise<void> {
@@ -244,6 +251,7 @@ export class PromptsService {
           endpoint,
           promptVersion: version,
           apiKeyPrefix: apiKey.slice(0, 8) + '...',
+          region,
           experimentId: experimentId ?? null,
           variantName: variantName ?? null,
         },

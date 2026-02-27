@@ -49,12 +49,14 @@ model PromptRequestLog {
   endpoint      String
   promptVersion Int      @map("prompt_version")
   apiKeyPrefix  String   @map("api_key_prefix")
+  region        String   @default("unknown")
   experimentId  String?  @map("experiment_id")
   variantName   String?  @map("variant_name")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([endpoint])
   @@index([apiKeyPrefix])
+  @@index([region])
   @@index([createdAt])
   @@map("prompt_request_logs")
 }
