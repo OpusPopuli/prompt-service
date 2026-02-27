@@ -22,6 +22,14 @@ API keys are configured via the `API_KEYS` environment variable (comma-separated
 }
 ```
 
+### Admin Authentication
+
+Admin endpoints (`/admin/*`) use a separate set of API keys configured via the `ADMIN_API_KEYS` environment variable. This separation ensures that node API keys cannot access template management or experiment controls.
+
+```
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
 ## Rate Limits
 
 | Scope | Limit | Window |
@@ -87,7 +95,8 @@ Returns a rendered prompt for web page structural analysis (scraping pipeline).
 {
   "promptText": "You are a web scraping expert. Analyze the following HTML...",
   "promptHash": "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
-  "promptVersion": "v1"
+  "promptVersion": "v1",
+  "expiresAt": "2026-02-25T13:00:00.000Z"
 }
 ```
 
@@ -123,7 +132,8 @@ Returns a rendered prompt for document analysis (petition scanning, proposition 
 {
   "promptText": "You are a nonpartisan civic analyst. Analyze this petition...\nRespond with valid JSON only. No markdown, no explanations.",
   "promptHash": "b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890a1",
-  "promptVersion": "v1"
+  "promptVersion": "v1",
+  "expiresAt": "2026-02-25T13:00:00.000Z"
 }
 ```
 
@@ -169,7 +179,8 @@ Returns a rendered prompt for RAG (Retrieval-Augmented Generation) answer genera
 {
   "promptText": "You are a helpful assistant that answers questions based only on the provided context...",
   "promptHash": "c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890a1b2",
-  "promptVersion": "v1"
+  "promptVersion": "v1",
+  "expiresAt": "2026-02-25T13:00:00.000Z"
 }
 ```
 
@@ -216,6 +227,189 @@ The service looks up all templates matching the given version, computes the SHA-
 
 ---
 
+---
+
+## Admin: Template Management
+
+All admin endpoints require an admin API key (`ADMIN_API_KEYS`).
+
+### `GET /admin/templates`
+
+List all templates with optional filters.
+
+#### Query Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `category` | string | Filter by category (e.g., `structural_analysis`) |
+| `isActive` | boolean | Filter by active status |
+
+#### Response
+
+```json
+[
+  {
+    "id": "uuid",
+    "name": "document-analysis-petition",
+    "category": "document_analysis",
+    "description": "Nonpartisan petition analysis",
+    "templateText": "You are a nonpartisan civic analyst...",
+    "variables": ["TEXT"],
+    "version": 3,
+    "isActive": true,
+    "createdAt": "2026-01-15T10:00:00.000Z",
+    "updatedAt": "2026-02-20T14:30:00.000Z"
+  }
+]
+```
+
+### `GET /admin/templates/:id`
+
+Get a template by ID, including its full version history.
+
+#### Response
+
+```json
+{
+  "id": "uuid",
+  "name": "document-analysis-petition",
+  "version": 3,
+  "versionHistory": [
+    {
+      "id": "uuid",
+      "version": 3,
+      "templateText": "...",
+      "templateHash": "abc123...",
+      "changeNote": "Improved neutrality language",
+      "createdAt": "2026-02-20T14:30:00.000Z"
+    },
+    {
+      "id": "uuid",
+      "version": 2,
+      "templateText": "...",
+      "templateHash": "def456...",
+      "changeNote": "Added beneficiary analysis",
+      "createdAt": "2026-02-10T09:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /admin/templates`
+
+Create a new prompt template. Automatically creates an initial version history entry.
+
+#### Request Body
+
+```json
+{
+  "name": "document-analysis-ballot-measure",
+  "category": "document_analysis",
+  "description": "Ballot measure analysis template",
+  "templateText": "You are a nonpartisan civic analyst. Analyze the following ballot measure:\n\n{{TEXT}}",
+  "variables": ["TEXT"],
+  "changeNote": "Initial creation"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Lowercase with hyphens only (e.g., `my-template-name`) |
+| `category` | string | Yes | Template category |
+| `description` | string | Yes | Human-readable purpose |
+| `templateText` | string | Yes | Template with `{{VARIABLE}}` placeholders |
+| `variables` | string[] | No | List of expected variable names |
+| `changeNote` | string | No | Defaults to "Initial creation" |
+
+### `PATCH /admin/templates/:id`
+
+Update an existing template. Increments the version number and creates a version history entry.
+
+#### Request Body
+
+```json
+{
+  "templateText": "Updated template text with {{TEXT}} placeholder",
+  "changeNote": "Improved extraction accuracy"
+}
+```
+
+All fields are optional except `changeNote`. Only provided fields are updated.
+
+### `DELETE /admin/templates/:id`
+
+Soft-delete a template (sets `isActive: false`). The template and its history are preserved.
+
+### `POST /admin/templates/:id/rollback`
+
+Rollback a template to a previous version. Creates a new version entry (does not rewrite history).
+
+#### Request Body
+
+```json
+{
+  "targetVersion": 2,
+  "changeNote": "Reverting due to accuracy regression"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `targetVersion` | integer | Yes | Version number to rollback to (minimum: 1) |
+| `changeNote` | string | No | Defaults to "Rollback to version N" |
+
+---
+
+## Admin: A/B Experiments
+
+Experiment endpoints manage A/B tests that serve different prompt versions to different nodes based on deterministic bucketing.
+
+### `POST /admin/experiments`
+
+Create a new experiment in `draft` status.
+
+#### Request Body
+
+```json
+{
+  "name": "petition-prompt-v3-test",
+  "description": "Test improved neutrality language",
+  "templateId": "uuid-of-template",
+  "variants": [
+    { "name": "control", "versionId": "uuid-of-version-history-entry", "trafficPct": 50 },
+    { "name": "variant_a", "versionId": "uuid-of-version-history-entry", "trafficPct": 50 }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique experiment name |
+| `description` | string | No | Experiment description |
+| `templateId` | UUID | Yes | Template this experiment applies to |
+| `variants` | array | Yes | Minimum 2 variants; `trafficPct` must sum to 100 |
+| `variants[].name` | string | Yes | Variant name (e.g., "control", "variant_a") |
+| `variants[].versionId` | UUID | Yes | ID of a `PromptVersionHistory` entry |
+| `variants[].trafficPct` | integer | Yes | Traffic percentage (0-100) |
+
+### `GET /admin/experiments`
+
+List all experiments with their variants and linked templates.
+
+### `GET /admin/experiments/:id`
+
+Get experiment details including variants with their associated version entries.
+
+### `POST /admin/experiments/:id/activate`
+
+Activate a draft experiment. Only one experiment may be active per template at a time. Returns `400` if the experiment is not in `draft` status or another experiment is already active for the same template.
+
+### `POST /admin/experiments/:id/stop`
+
+Stop an active experiment. Sets status to `stopped` and records `stoppedAt` timestamp. Once stopped, the template reverts to serving its default (latest) version.
+
+---
+
 ## Common Response Format
 
 All prompt endpoints return the same shape:
@@ -228,6 +422,8 @@ interface PromptServiceResponse {
   promptHash: string;
   /** Template version identifier (e.g., "v1") */
   promptVersion: string;
+  /** ISO 8601 expiry timestamp — nodes must re-fetch after this time */
+  expiresAt: string;
 }
 ```
 
@@ -235,6 +431,8 @@ The `promptHash` is computed from the template **before** variable interpolation
 - The same template always produces the same hash regardless of input
 - The hash changes only when the template itself is edited
 - Hashes can be verified via the `/prompts/verify` endpoint
+
+The `expiresAt` field is computed as `now + PROMPT_TTL_SECONDS` (default: 3600 seconds / 1 hour). Nodes should re-fetch prompts after the expiry time to pick up template updates.
 
 ## Error Responses
 

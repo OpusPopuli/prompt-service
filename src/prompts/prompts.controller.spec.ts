@@ -41,6 +41,7 @@ describe('PromptsController', () => {
       promptText: 'rendered',
       promptHash: 'abc',
       promptVersion: 'v1',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
     };
 
     jest
@@ -64,6 +65,7 @@ describe('PromptsController', () => {
       promptText: 'rendered',
       promptHash: 'abc',
       promptVersion: 'v1',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
     };
 
     jest
@@ -82,6 +84,7 @@ describe('PromptsController', () => {
       promptText: 'rendered',
       promptHash: 'abc',
       promptVersion: 'v1',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
     };
 
     jest.spyOn(service, 'getRagPrompt').mockResolvedValue(expected);
