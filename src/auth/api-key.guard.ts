@@ -8,15 +8,23 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  private readonly validKeys: Set<string>;
+  private readonly keyToRegion: Map<string, string>;
 
   constructor(private readonly config: ConfigService) {
     const keys = this.config.get<string>('API_KEYS', '');
-    this.validKeys = new Set(
+    this.keyToRegion = new Map(
       keys
         .split(',')
-        .map((k) => k.trim())
-        .filter(Boolean),
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const colonIdx = entry.indexOf(':');
+          if (colonIdx === -1) return [entry, 'unknown'] as [string, string];
+          return [entry.slice(colonIdx + 1), entry.slice(0, colonIdx)] as [
+            string,
+            string,
+          ];
+        }),
     );
   }
 
@@ -31,12 +39,14 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const token = authHeader.slice(7);
-    if (!this.validKeys.has(token)) {
+    const region = this.keyToRegion.get(token);
+    if (region === undefined) {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    // Attach the API key identifier for analytics/logging
+    // Attach the API key and region for analytics/logging
     request.apiKey = token;
+    request.region = region;
     return true;
   }
 }

@@ -50,11 +50,13 @@ describe('PromptsController', () => {
 
     const result = await controller.structuralAnalysis(dto, {
       apiKey: 'key',
+      region: 'ca',
     });
 
     expect(service.getStructuralAnalysisPrompt).toHaveBeenCalledWith(
       dto,
       'key',
+      'ca',
     );
     expect(result).toEqual(expected);
   });
@@ -72,9 +74,16 @@ describe('PromptsController', () => {
       .spyOn(service, 'getDocumentAnalysisPrompt')
       .mockResolvedValue(expected);
 
-    const result = await controller.documentAnalysis(dto, { apiKey: 'key' });
+    const result = await controller.documentAnalysis(dto, {
+      apiKey: 'key',
+      region: 'ca',
+    });
 
-    expect(service.getDocumentAnalysisPrompt).toHaveBeenCalledWith(dto, 'key');
+    expect(service.getDocumentAnalysisPrompt).toHaveBeenCalledWith(
+      dto,
+      'key',
+      'ca',
+    );
     expect(result).toEqual(expected);
   });
 
@@ -89,9 +98,12 @@ describe('PromptsController', () => {
 
     jest.spyOn(service, 'getRagPrompt').mockResolvedValue(expected);
 
-    const result = await controller.rag(dto, { apiKey: 'key' });
+    const result = await controller.rag(dto, {
+      apiKey: 'key',
+      region: 'ca',
+    });
 
-    expect(service.getRagPrompt).toHaveBeenCalledWith(dto, 'key');
+    expect(service.getRagPrompt).toHaveBeenCalledWith(dto, 'key', 'ca');
     expect(result).toEqual(expected);
   });
 

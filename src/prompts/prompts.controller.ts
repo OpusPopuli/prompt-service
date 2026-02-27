@@ -32,9 +32,13 @@ export class PromptsController {
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async structuralAnalysis(
     @Body() dto: StructuralAnalysisDto,
-    @Req() req: { apiKey: string },
+    @Req() req: { apiKey: string; region: string },
   ) {
-    return this.promptsService.getStructuralAnalysisPrompt(dto, req.apiKey);
+    return this.promptsService.getStructuralAnalysisPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
   }
 
   @Post('document-analysis')
@@ -51,9 +55,13 @@ export class PromptsController {
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async documentAnalysis(
     @Body() dto: DocumentAnalysisDto,
-    @Req() req: { apiKey: string },
+    @Req() req: { apiKey: string; region: string },
   ) {
-    return this.promptsService.getDocumentAnalysisPrompt(dto, req.apiKey);
+    return this.promptsService.getDocumentAnalysisPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
   }
 
   @Post('rag')
@@ -68,8 +76,11 @@ export class PromptsController {
   @ApiResponse({ status: 401, description: 'Invalid API key' })
   @ApiResponse({ status: 404, description: 'Template not found' })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
-  async rag(@Body() dto: RagDto, @Req() req: { apiKey: string }) {
-    return this.promptsService.getRagPrompt(dto, req.apiKey);
+  async rag(
+    @Body() dto: RagDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getRagPrompt(dto, req.apiKey, req.region);
   }
 
   @Post('verify')
