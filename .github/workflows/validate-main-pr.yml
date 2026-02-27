@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check PR source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [[ "${{ github.head_ref }}" != "develop" ]]; then
+          if [[ "$HEAD_REF" != "develop" ]]; then
             echo "::error::PRs to main must come from the develop branch"
             echo ""
-            echo "Current source branch: ${{ github.head_ref }}"
+            echo "Current source branch: $HEAD_REF"
             echo ""
             echo "To fix this:"
             echo "1. Merge your changes to develop first"

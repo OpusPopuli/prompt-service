@@ -147,10 +147,10 @@ export class PromptsService {
     promptHash: string,
     promptVersion: string,
   ): Promise<VerifyResult> {
-    const versionNum = parseInt(promptVersion.replace('v', ''), 10);
+    const versionNum = Number.parseInt(promptVersion.replace('v', ''), 10);
 
     const templates = await this.prisma.promptTemplate.findMany({
-      where: { version: isNaN(versionNum) ? undefined : versionNum },
+      where: { version: Number.isNaN(versionNum) ? undefined : versionNum },
     });
 
     for (const t of templates) {

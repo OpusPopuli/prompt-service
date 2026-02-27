@@ -73,14 +73,14 @@ export class ExperimentsService {
         return variant;
       }
     }
-    return variants[variants.length - 1];
+    return variants.at(-1)!;
   }
 
   computeBucket(apiKey: string, experimentId: string): number {
     const hash = createHash('sha256')
       .update(apiKey + ':' + experimentId)
       .digest('hex');
-    const num = parseInt(hash.slice(0, 8), 16);
+    const num = Number.parseInt(hash.slice(0, 8), 16);
     return num % 100;
   }
 }
