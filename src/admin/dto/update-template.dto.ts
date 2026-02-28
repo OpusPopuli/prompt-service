@@ -1,5 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { OmitType, PartialType } from '@nestjs/swagger';
+import { ApiProperty, OmitType, PartialType } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 import { CreateTemplateDto } from './create-template.dto';
 

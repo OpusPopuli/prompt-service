@@ -14,6 +14,7 @@ NC='\033[0m'
 cleanup() {
   echo -e "\n${YELLOW}Cleaning up...${NC}"
   docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" down -v --remove-orphans 2>/dev/null || true
+  return 0
 }
 trap cleanup EXIT
 
@@ -29,7 +30,7 @@ for i in $(seq 1 30); do
     echo -e "${GREEN}PostgreSQL is ready${NC}"
     break
   fi
-  if [ "$i" -eq 30 ]; then
+  if [[ "$i" -eq 30 ]]; then
     echo -e "${RED}PostgreSQL failed to start${NC}"
     docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs prompt-db-test
     exit 1
@@ -44,7 +45,7 @@ for i in $(seq 1 60); do
     echo -e "${GREEN}Prompt service is healthy with seeded templates${NC}"
     break
   fi
-  if [ "$i" -eq 60 ]; then
+  if [[ "$i" -eq 60 ]]; then
     echo -e "${RED}Prompt service failed to become healthy${NC}"
     docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs prompt-service
     exit 1
@@ -56,7 +57,7 @@ echo -e "${GREEN}=== Running integration tests ===${NC}"
 docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" --profile test run --rm --build test-runner
 TEST_EXIT=$?
 
-if [ $TEST_EXIT -eq 0 ]; then
+if [[ $TEST_EXIT -eq 0 ]]; then
   echo -e "\n${GREEN}=== Integration tests passed ===${NC}"
 else
   echo -e "\n${RED}=== Integration tests failed ===${NC}"

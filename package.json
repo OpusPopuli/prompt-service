@@ -78,6 +78,11 @@
       "!**/main.ts"
     ],
     "coverageDirectory": "../coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "clover"
+    ],
     "testEnvironment": "node"
   }
 }

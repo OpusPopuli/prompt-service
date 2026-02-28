@@ -5,12 +5,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   private readonly keyToRegion: Map<string, string>;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const keys = this.config.get<string>('API_KEYS', '');
     this.keyToRegion = new Map(
       keys
@@ -28,7 +32,7 @@ export class ApiKeyGuard implements CanActivate {
     );
   }
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const authHeader: string | undefined = request.headers['authorization'];
 
@@ -39,14 +43,31 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const token = authHeader.slice(7);
-    const region = this.keyToRegion.get(token);
-    if (region === undefined) {
-      throw new UnauthorizedException('Invalid API key');
+
+    // Fast path: check env var keys first
+    const envRegion = this.keyToRegion.get(token);
+    if (envRegion !== undefined) {
+      request.apiKey = token;
+      request.region = envRegion;
+      return true;
     }
 
-    // Attach the API key and region for analytics/logging
-    request.apiKey = token;
-    request.region = region;
-    return true;
+    // Slow path: check DB node keys
+    const node = await this.prisma.node.findFirst({
+      where: {
+        apiKey: token,
+        status: 'certified',
+        certificationExpiresAt: { gt: new Date() },
+      },
+    });
+
+    if (node) {
+      request.apiKey = token;
+      request.region = node.region;
+      request.nodeId = node.id;
+      return true;
+    }
+
+    throw new UnauthorizedException('Invalid API key');
   }
 }
