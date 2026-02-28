@@ -1,6 +1,6 @@
 services:
   prompt-db-test:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: prompt_service_test
       POSTGRES_USER: postgres
