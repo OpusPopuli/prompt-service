@@ -290,6 +290,49 @@ function hash(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+async function upsertVaultSecret(name: string, key: string, description: string) {
+  try {
+    const existing = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id::text FROM vault.decrypted_secrets WHERE name = ${name}
+    `;
+    if (existing.length === 0) {
+      await prisma.$queryRaw`
+        SELECT vault.create_secret(${key}, ${name}, ${description})
+      `;
+      console.log(`  ✓ Vault: ${name}`);
+    } else {
+      console.log(`  - Vault: ${name} (already exists)`);
+    }
+  } catch (error) {
+    console.warn(`  ⚠ Vault: ${name} failed (${error})`);
+  }
+}
+
+function parseRegionEntry(entry: string): { region: string; key: string } {
+  const colonIdx = entry.indexOf(':');
+  if (colonIdx === -1) return { region: 'unknown', key: entry };
+  return { region: entry.slice(0, colonIdx), key: entry.slice(colonIdx + 1) };
+}
+
+async function seedVaultKeys() {
+  console.log('\nSeeding Vault keys...');
+
+  const apiKeys = process.env.API_KEYS ?? '';
+  const regionEntries = apiKeys.split(',').map((e) => e.trim()).filter(Boolean);
+
+  for (const entry of regionEntries) {
+    const { region, key } = parseRegionEntry(entry);
+    await upsertVaultSecret(`region_key_${region}`, key, `Region API key for ${region}`);
+  }
+
+  const adminKeys = process.env.ADMIN_API_KEYS ?? '';
+  const adminEntries = adminKeys.split(',').map((k) => k.trim()).filter(Boolean);
+
+  for (let i = 0; i < adminEntries.length; i++) {
+    await upsertVaultSecret(`admin_key_${i + 1}`, adminEntries[i], `Admin API key ${i + 1}`);
+  }
+}
+
 async function main() {
   console.log('Seeding prompt templates...');
 
@@ -321,6 +364,8 @@ async function main() {
   }
 
   console.log(`\nSeeded ${prompts.length} prompt templates.`);
+
+  await seedVaultKeys();
 }
 
 main()

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NodeRegistryController } from './node-registry.controller';
 import { NodeRegistryService } from './node-registry.service';
+import { VaultService } from '../common/vault.service';
 
 describe('NodeRegistryController', () => {
   let controller: NodeRegistryController;
@@ -30,6 +31,10 @@ describe('NodeRegistryController', () => {
         {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('admin-test-key') },
+        },
+        {
+          provide: VaultService,
+          useValue: { getSecretsByPrefix: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile();

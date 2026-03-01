@@ -1,6 +1,6 @@
 services:
   opuspopuli-prompts-db-test:
-    image: postgres:17-alpine
+    image: supabase/postgres:17.6.1.091
     container_name: opuspopuli-prompts-db-test
     environment:
       POSTGRES_DB: prompt_service_test
@@ -8,6 +8,10 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - '5434:5432'
+    volumes:
+      - ./supabase/roles.sql:/docker-entrypoint-initdb.d/ll-init-roles.sql:ro
+      - ./supabase/migrate.sh:/docker-entrypoint-initdb.d/migrate.sh:ro
+      - ./supabase/init.sql:/docker-entrypoint-initdb.d/zz-init-vault.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -19,18 +23,18 @@ services:
     image: opuspopuli-prompts
     container_name: opuspopuli-prompts-test
     ports:
-      - '3101:3100'
+      - '3201:3200'
     environment:
       DATABASE_URL: postgresql://postgres:postgres@opuspopuli-prompts-db-test:5432/prompt_service_test?schema=public
       API_KEYS: ca:test-api-key-1,tx:test-api-key-2
       ADMIN_API_KEYS: admin-test-key-1
       PROMPT_TTL_SECONDS: 300
-      PORT: 3100
+      PORT: 3200
     depends_on:
       opuspopuli-prompts-db-test:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:3100/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:3200/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -42,7 +46,7 @@ services:
       dockerfile: Dockerfile.test-runner
     container_name: opuspopuli-prompts-test-runner
     environment:
-      PROMPT_SERVICE_URL: http://opuspopuli-prompts:3100
+      PROMPT_SERVICE_URL: http://opuspopuli-prompts:3200
       DATABASE_URL: postgresql://postgres:postgres@opuspopuli-prompts-db-test:5432/prompt_service_test?schema=public
       API_KEY: test-api-key-1
       API_KEY_2: test-api-key-2

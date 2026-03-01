@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ExperimentsAdminController } from './experiments-admin.controller';
 import { AdminService } from './admin.service';
+import { VaultService } from '../common/vault.service';
 
 describe('ExperimentsAdminController', () => {
   let controller: ExperimentsAdminController;
@@ -24,6 +25,10 @@ describe('ExperimentsAdminController', () => {
         {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('admin-test-key') },
+        },
+        {
+          provide: VaultService,
+          useValue: { getSecretsByPrefix: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile();

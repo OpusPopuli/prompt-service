@@ -7,7 +7,7 @@ const TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 2_000;
 
 export default async function globalSetup() {
-  const baseUrl = process.env.PROMPT_SERVICE_URL || 'http://localhost:3101';
+  const baseUrl = process.env.PROMPT_SERVICE_URL || 'http://localhost:3201';
   const healthUrl = `${baseUrl}/health`;
 
   console.log(`\nWaiting for prompt service at ${healthUrl}...`);
