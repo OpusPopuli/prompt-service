@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Opus Populi - Prompt Service",
-    "description": "API collection for the Opus Populi private AI prompt service.\n\n## Authentication\n- **Node endpoints** (`/prompts/*`): Use `{{apiKey}}` (format: `region:key`)\n- **Admin endpoints** (`/admin/*`): Use `{{adminKey}}`\n\n## Setup\n1. Import this collection\n2. Import the environment file (`prompt-service.postman_environment.json`)\n3. Start the service: `docker compose up -d`\n4. Run the Health Check request first to verify connectivity",
+    "description": "API collection for the Opus Populi private AI prompt service.\n\n## Authentication\n- **Bearer token** (`/prompts/*`): Use `{{apiKey}}` (format: `region:key`) — region keys and env var keys\n- **HMAC signing** (`/prompts/*`): Use `{{nodeApiKey}}` + `{{nodeId}}` — registered node keys with request signing\n- **Admin endpoints** (`/admin/*`): Use `{{adminKey}}`\n\n## HMAC Setup\n1. Register a node: Run **Admin - Node Registry > Register Node** (saves `nodeId` and `nodeApiKey`)\n2. Certify the node: Run **Admin - Node Registry > Certify Node**\n3. Use requests in the **HMAC Auth** folder — pre-request scripts compute signatures automatically\n\n## Setup\n1. Import this collection\n2. Import the environment file (`prompt-service.postman_environment.json`)\n3. Start the service: `docker compose up -d`\n4. Run the Health Check request first to verify connectivity",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -11,7 +11,8 @@
     { "key": "templateId", "value": "" },
     { "key": "experimentId", "value": "" },
     { "key": "nodeId", "value": "" },
-    { "key": "versionId", "value": "" }
+    { "key": "versionId", "value": "" },
+    { "key": "nodeApiKey", "value": "" }
   ],
   "item": [
     {
@@ -485,6 +486,11 @@
                   "  pm.expect(body).to.have.property('id');",
                   "  pm.expect(body).to.have.property('apiKey');",
                   "  pm.collectionVariables.set('nodeId', body.id);",
+                  "  pm.collectionVariables.set('nodeApiKey', body.apiKey);",
+                  "  pm.environment.set('nodeId', body.id);",
+                  "  pm.environment.set('nodeApiKey', body.apiKey);",
+                  "  console.log('Saved nodeId: ' + body.id);",
+                  "  console.log('Saved nodeApiKey: ' + body.apiKey.substring(0, 8) + '...');",
                   "});"
                 ]
               }
@@ -569,6 +575,14 @@
                   "pm.test('Has audit logs', () => {",
                   "  const body = pm.response.json();",
                   "  pm.expect(body).to.have.property('auditLogs');",
+                  "  if (body.id) {",
+                  "    pm.collectionVariables.set('nodeId', body.id);",
+                  "    pm.environment.set('nodeId', body.id);",
+                  "  }",
+                  "  if (body.apiKey) {",
+                  "    pm.collectionVariables.set('nodeApiKey', body.apiKey);",
+                  "    pm.environment.set('nodeApiKey', body.apiKey);",
+                  "  }",
                   "});"
                 ]
               }
@@ -616,7 +630,17 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Node certified', () => {",
-                  "  pm.expect(pm.response.json().status).to.eql('certified');",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql('certified');",
+                  "  if (body.id) {",
+                  "    pm.collectionVariables.set('nodeId', body.id);",
+                  "    pm.environment.set('nodeId', body.id);",
+                  "  }",
+                  "  if (body.apiKey) {",
+                  "    pm.collectionVariables.set('nodeApiKey', body.apiKey);",
+                  "    pm.environment.set('nodeApiKey', body.apiKey);",
+                  "  }",
+                  "  console.log('Saved nodeId:', body.id, 'nodeApiKey:', body.apiKey ? '***' : 'NOT FOUND');",
                   "});"
                 ]
               }
@@ -672,7 +696,16 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Node recertified', () => {",
-                  "  pm.expect(pm.response.json().status).to.eql('certified');",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql('certified');",
+                  "  if (body.id) {",
+                  "    pm.collectionVariables.set('nodeId', body.id);",
+                  "    pm.environment.set('nodeId', body.id);",
+                  "  }",
+                  "  if (body.apiKey) {",
+                  "    pm.collectionVariables.set('nodeApiKey', body.apiKey);",
+                  "    pm.environment.set('nodeApiKey', body.apiKey);",
+                  "  }",
                   "});"
                 ]
               }
@@ -702,6 +735,10 @@
                   "pm.test('New API key returned', () => {",
                   "  const body = pm.response.json();",
                   "  pm.expect(body).to.have.property('apiKey');",
+                  "  if (body.apiKey) {",
+                  "    pm.collectionVariables.set('nodeApiKey', body.apiKey);",
+                  "    pm.environment.set('nodeApiKey', body.apiKey);",
+                  "  }",
                   "});"
                 ]
               }
@@ -733,6 +770,188 @@
               { "key": "Authorization", "value": "Bearer {{adminKey}}" }
             ],
             "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "HMAC Auth",
+      "description": "Prompt endpoints using HMAC request signing instead of Bearer tokens.\n\n## Setup\n1. Register a node via **Admin - Node Registry > Register Node** (saves `nodeId` and `nodeApiKey`)\n2. Certify the node via **Admin - Node Registry > Certify Node** (also saves `nodeId` and `nodeApiKey`)\n3. Run requests in this folder — the pre-request script computes the HMAC signature automatically\n\n**Note:** If the node is already registered, skip step 1. The Certify, Re-certify, Get Node by ID, and Rotate Key endpoints all save `nodeId` and `nodeApiKey` to your environment.\n\n## How it works\nEach request is signed with:\n- `X-HMAC-Signature`: HMAC-SHA256(apiKey, `timestamp\\nmethod\\npath\\nbodyHash`) → Base64\n- `X-HMAC-Timestamp`: Unix timestamp (seconds)\n- `X-HMAC-Key-Id`: Node UUID",
+      "item": [
+        {
+          "name": "RAG (HMAC)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const apiKey = pm.collectionVariables.get('nodeApiKey') || pm.environment.get('nodeApiKey') || pm.variables.get('nodeApiKey');",
+                  "const nodeId = pm.collectionVariables.get('nodeId') || pm.environment.get('nodeId') || pm.variables.get('nodeId');",
+                  "",
+                  "if (!apiKey || !nodeId) {",
+                  "  throw new Error('nodeApiKey or nodeId not set. Run Register Node + Certify Node first.');",
+                  "}",
+                  "",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const method = pm.request.method;",
+                  "const path = '/' + pm.request.url.path.join('/');",
+                  "const body = pm.request.body ? pm.request.body.raw : '';",
+                  "const bodyHash = CryptoJS.SHA256(body).toString();",
+                  "const signatureString = timestamp + '\\n' + method + '\\n' + path + '\\n' + bodyHash;",
+                  "const signature = CryptoJS.HmacSHA256(signatureString, apiKey).toString(CryptoJS.enc.Base64);",
+                  "",
+                  "console.log('HMAC Debug - path:', path, 'method:', method, 'keyPrefix:', apiKey.substring(0, 8));",
+                  "console.log('HMAC Debug - bodyHash:', bodyHash);",
+                  "console.log('HMAC Debug - signature:', signature);",
+                  "",
+                  "pm.request.headers.add({ key: 'X-HMAC-Signature', value: signature });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Timestamp', value: timestamp });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Key-Id', value: nodeId });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "  pm.expect(body).to.have.property('expiresAt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"context\": \"Proposition 36 amends the California Constitution to increase penalties for certain drug and theft crimes.\",\n  \"query\": \"What does Proposition 36 change about drug crime penalties?\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/rag", "host": ["{{baseUrl}}"], "path": ["prompts", "rag"] }
+          }
+        },
+        {
+          "name": "Structural Analysis (HMAC)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const apiKey = pm.collectionVariables.get('nodeApiKey') || pm.environment.get('nodeApiKey') || pm.variables.get('nodeApiKey');",
+                  "const nodeId = pm.collectionVariables.get('nodeId') || pm.environment.get('nodeId') || pm.variables.get('nodeId');",
+                  "",
+                  "if (!apiKey || !nodeId) {",
+                  "  throw new Error('nodeApiKey or nodeId not set. Run Register Node + Certify Node first.');",
+                  "}",
+                  "",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const method = pm.request.method;",
+                  "const path = '/' + pm.request.url.path.join('/');",
+                  "const body = pm.request.body ? pm.request.body.raw : '';",
+                  "const bodyHash = CryptoJS.SHA256(body).toString();",
+                  "const signatureString = timestamp + '\\n' + method + '\\n' + path + '\\n' + bodyHash;",
+                  "const signature = CryptoJS.HmacSHA256(signatureString, apiKey).toString(CryptoJS.enc.Base64);",
+                  "",
+                  "console.log('HMAC Debug - path:', path, 'method:', method, 'keyPrefix:', apiKey.substring(0, 8));",
+                  "console.log('HMAC Debug - bodyHash:', bodyHash);",
+                  "console.log('HMAC Debug - signature:', signature);",
+                  "",
+                  "pm.request.headers.add({ key: 'X-HMAC-Signature', value: signature });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Timestamp', value: timestamp });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Key-Id', value: nodeId });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataType\": \"propositions\",\n  \"contentGoal\": \"Extract ballot measure details\",\n  \"category\": \"political\",\n  \"hints\": [\"Look for Proposition in headings\"],\n  \"html\": \"<html><body><h1>Proposition 1</h1><p>This measure would authorize bonds...</p></body></html>\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/structural-analysis", "host": ["{{baseUrl}}"], "path": ["prompts", "structural-analysis"] }
+          }
+        },
+        {
+          "name": "Document Analysis (HMAC)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const apiKey = pm.collectionVariables.get('nodeApiKey') || pm.environment.get('nodeApiKey') || pm.variables.get('nodeApiKey');",
+                  "const nodeId = pm.collectionVariables.get('nodeId') || pm.environment.get('nodeId') || pm.variables.get('nodeId');",
+                  "",
+                  "if (!apiKey || !nodeId) {",
+                  "  throw new Error('nodeApiKey or nodeId not set. Run Register Node + Certify Node first.');",
+                  "}",
+                  "",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const method = pm.request.method;",
+                  "const path = '/' + pm.request.url.path.join('/');",
+                  "const body = pm.request.body ? pm.request.body.raw : '';",
+                  "const bodyHash = CryptoJS.SHA256(body).toString();",
+                  "const signatureString = timestamp + '\\n' + method + '\\n' + path + '\\n' + bodyHash;",
+                  "const signature = CryptoJS.HmacSHA256(signatureString, apiKey).toString(CryptoJS.enc.Base64);",
+                  "",
+                  "console.log('HMAC Debug - path:', path, 'method:', method, 'keyPrefix:', apiKey.substring(0, 8));",
+                  "console.log('HMAC Debug - bodyHash:', bodyHash);",
+                  "console.log('HMAC Debug - signature:', signature);",
+                  "",
+                  "pm.request.headers.add({ key: 'X-HMAC-Signature', value: signature });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Timestamp', value: timestamp });",
+                  "pm.request.headers.add({ key: 'X-HMAC-Key-Id', value: nodeId });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"petition\",\n  \"text\": \"We, the undersigned residents of California, hereby petition the state legislature to allocate additional funding for public transit.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/document-analysis", "host": ["{{baseUrl}}"], "path": ["prompts", "document-analysis"] }
           }
         }
       ]

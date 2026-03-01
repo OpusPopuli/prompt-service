@@ -1,12 +1,13 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { ApiKeyGuard } from './api-key.guard';
 
 function createMockPrisma() {
   return {
     node: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
   };
 }
@@ -14,14 +15,17 @@ function createMockPrisma() {
 function createMockVault() {
   return {
     getSecretsByPrefix: jest.fn().mockResolvedValue([]),
+    getSecret: jest.fn(),
     createSecret: jest.fn(),
     deleteSecret: jest.fn(),
   };
 }
 
-function createMockContext(authHeader?: string) {
+function createMockContext(headers: Record<string, string> = {}) {
   const request: Record<string, unknown> = {
-    headers: authHeader ? { authorization: authHeader } : {},
+    headers,
+    method: 'POST',
+    path: '/prompts/rag',
   };
 
   return {
@@ -30,6 +34,46 @@ function createMockContext(authHeader?: string) {
     } as unknown as ExecutionContext,
     request,
   };
+}
+
+function createBearerContext(authHeader?: string) {
+  return createMockContext(authHeader ? { authorization: authHeader } : {});
+}
+
+/** Helper to compute an HMAC signature for tests. */
+function computeHmac(
+  apiKey: string,
+  timestamp: string,
+  method: string,
+  path: string,
+  body: string,
+): string {
+  const bodyHash = createHash('sha256').update(body).digest('hex');
+  const signatureString = `${timestamp}\n${method}\n${path}\n${bodyHash}`;
+  return createHmac('sha256', apiKey).update(signatureString).digest('base64');
+}
+
+function createHmacContext(
+  apiKey: string,
+  nodeId: string,
+  body: string = '{"context":"test","query":"test"}',
+  timestampOverride?: string,
+) {
+  const timestamp =
+    timestampOverride ?? Math.floor(Date.now() / 1000).toString();
+  const method = 'POST';
+  const path = '/prompts/rag';
+  const signature = computeHmac(apiKey, timestamp, method, path, body);
+
+  const { ctx, request } = createMockContext({
+    'x-hmac-signature': signature,
+    'x-hmac-timestamp': timestamp,
+    'x-hmac-key-id': nodeId,
+    'content-type': 'application/json',
+  });
+
+  request.rawBody = Buffer.from(body);
+  return { ctx, request };
 }
 
 describe('ApiKeyGuard', () => {
@@ -51,28 +95,28 @@ describe('ApiKeyGuard', () => {
   });
 
   it('should allow a valid env var API key', async () => {
-    const { ctx } = createMockContext('Bearer key-1');
+    const { ctx } = createBearerContext('Bearer key-1');
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
   it('should reject missing Authorization header', async () => {
-    const { ctx } = createMockContext();
+    const { ctx } = createBearerContext();
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
   it('should reject non-Bearer auth', async () => {
-    const { ctx } = createMockContext('Basic abc123');
+    const { ctx } = createBearerContext('Basic abc123');
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
   it('should reject invalid API key not in env or DB', async () => {
     mockPrisma.node.findFirst.mockResolvedValue(null);
-    const { ctx } = createMockContext('Bearer invalid-key');
+    const { ctx } = createBearerContext('Bearer invalid-key');
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
   it('should attach apiKey and region to request for env var keys', async () => {
-    const { ctx, request } = createMockContext('Bearer key-2');
+    const { ctx, request } = createBearerContext('Bearer key-2');
 
     await guard.canActivate(ctx);
 
@@ -83,7 +127,7 @@ describe('ApiKeyGuard', () => {
 
   it('should reject Bearer token with no key after space', async () => {
     mockPrisma.node.findFirst.mockResolvedValue(null);
-    const { ctx } = createMockContext('Bearer ');
+    const { ctx } = createBearerContext('Bearer ');
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
@@ -97,8 +141,7 @@ describe('ApiKeyGuard', () => {
       createMockVault() as never,
     );
 
-    const { ctx } = createMockContext('Bearer some-key');
-    // Should fall through to DB lookup since no env keys configured
+    const { ctx } = createBearerContext('Bearer some-key');
     await expect(emptyGuard.canActivate(ctx)).rejects.toThrow(
       UnauthorizedException,
     );
@@ -114,7 +157,7 @@ describe('ApiKeyGuard', () => {
       createMockVault() as never,
     );
 
-    const { ctx, request } = createMockContext('Bearer key:with:colons');
+    const { ctx, request } = createBearerContext('Bearer key:with:colons');
     await colonGuard.canActivate(ctx);
 
     expect(request.apiKey).toBe('key:with:colons');
@@ -131,7 +174,7 @@ describe('ApiKeyGuard', () => {
       createMockVault() as never,
     );
 
-    const { ctx, request } = createMockContext('Bearer legacy-key');
+    const { ctx, request } = createBearerContext('Bearer legacy-key');
 
     await legacyGuard.canActivate(ctx);
 
@@ -150,7 +193,7 @@ describe('ApiKeyGuard', () => {
         apiKeyHash: nodeKeyHash,
         status: 'certified',
       });
-      const { ctx, request } = createMockContext(`Bearer ${nodeKey}`);
+      const { ctx, request } = createBearerContext(`Bearer ${nodeKey}`);
 
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(request.apiKey).toBe(nodeKey);
@@ -160,7 +203,7 @@ describe('ApiKeyGuard', () => {
 
     it('should query DB with hashed token', async () => {
       mockPrisma.node.findFirst.mockResolvedValue(null);
-      const { ctx } = createMockContext('Bearer some-node-key');
+      const { ctx } = createBearerContext('Bearer some-node-key');
 
       await guard.canActivate(ctx).catch(() => {});
 
@@ -177,7 +220,7 @@ describe('ApiKeyGuard', () => {
     });
 
     it('should query DB only when key not found in env vars', async () => {
-      const { ctx } = createMockContext('Bearer key-1');
+      const { ctx } = createBearerContext('Bearer key-1');
 
       await guard.canActivate(ctx);
 
@@ -186,7 +229,7 @@ describe('ApiKeyGuard', () => {
 
     it('should reject when node is not certified', async () => {
       mockPrisma.node.findFirst.mockResolvedValue(null);
-      const { ctx } = createMockContext('Bearer uncertified-node-key');
+      const { ctx } = createBearerContext('Bearer uncertified-node-key');
 
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         UnauthorizedException,
@@ -195,7 +238,7 @@ describe('ApiKeyGuard', () => {
 
     it('should reject expired node certification (DB returns null for expired)', async () => {
       mockPrisma.node.findFirst.mockResolvedValue(null);
-      const { ctx } = createMockContext('Bearer expired-node-key');
+      const { ctx } = createBearerContext('Bearer expired-node-key');
 
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         UnauthorizedException,
@@ -204,7 +247,7 @@ describe('ApiKeyGuard', () => {
 
     it('should reject pending node key (DB returns null for non-certified)', async () => {
       mockPrisma.node.findFirst.mockResolvedValue(null);
-      const { ctx } = createMockContext('Bearer pending-node-key');
+      const { ctx } = createBearerContext('Bearer pending-node-key');
 
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         UnauthorizedException,
@@ -212,7 +255,7 @@ describe('ApiKeyGuard', () => {
     });
 
     it('should not set nodeId for env var keys', async () => {
-      const { ctx, request } = createMockContext('Bearer key-3');
+      const { ctx, request } = createBearerContext('Bearer key-3');
 
       await guard.canActivate(ctx);
 
@@ -230,7 +273,7 @@ describe('ApiKeyGuard', () => {
 
       await guard.onModuleInit();
 
-      const { ctx, request } = createMockContext('Bearer vault-fl-key');
+      const { ctx, request } = createBearerContext('Bearer vault-fl-key');
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(request.region).toBe('fl');
     });
@@ -242,8 +285,7 @@ describe('ApiKeyGuard', () => {
 
       await guard.onModuleInit();
 
-      // Env var keys should still work
-      const { ctx } = createMockContext('Bearer key-1');
+      const { ctx } = createBearerContext('Bearer key-1');
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
     });
 
@@ -254,13 +296,177 @@ describe('ApiKeyGuard', () => {
 
       await guard.onModuleInit();
 
-      // Env var key still works
-      const { ctx: ctx1 } = createMockContext('Bearer key-1');
+      const { ctx: ctx1 } = createBearerContext('Bearer key-1');
       await expect(guard.canActivate(ctx1)).resolves.toBe(true);
 
-      // Vault key also works
-      const { ctx: ctx2 } = createMockContext('Bearer vault-fl-key');
+      const { ctx: ctx2 } = createBearerContext('Bearer vault-fl-key');
       await expect(guard.canActivate(ctx2)).resolves.toBe(true);
+    });
+  });
+
+  describe('HMAC authentication', () => {
+    const nodeId = 'hmac-node-uuid';
+    const apiKey = 'test-hmac-api-key-64chars-hex-padded-to-reach-length';
+    const certifiedNode = {
+      id: nodeId,
+      region: 'ca',
+      status: 'certified',
+      apiKeySecretId: 'vault-secret-uuid',
+      certificationExpiresAt: new Date(Date.now() + 86400000), // +1 day
+    };
+
+    it('should authenticate with valid HMAC signature', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const { ctx, request } = createHmacContext(apiKey, nodeId);
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(request.region).toBe('ca');
+      expect(request.nodeId).toBe(nodeId);
+    });
+
+    it('should reject expired timestamp (past)', async () => {
+      const expiredTimestamp = (Math.floor(Date.now() / 1000) - 600).toString(); // 10 min ago
+      const { ctx } = createHmacContext(
+        apiKey,
+        nodeId,
+        '{"test":"body"}',
+        expiredTimestamp,
+      );
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'HMAC timestamp expired',
+      );
+    });
+
+    it('should reject future timestamp beyond window', async () => {
+      const futureTimestamp = (Math.floor(Date.now() / 1000) + 600).toString(); // 10 min ahead
+      const { ctx } = createHmacContext(
+        apiKey,
+        nodeId,
+        '{"test":"body"}',
+        futureTimestamp,
+      );
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'HMAC timestamp expired',
+      );
+    });
+
+    it('should reject invalid signature', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const { ctx, request } = createHmacContext(apiKey, nodeId);
+      // Tamper with the signature
+      request.headers = {
+        ...(request.headers as Record<string, string>),
+        'x-hmac-signature': 'dGFtcGVyZWQgc2lnbmF0dXJl',
+      };
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Invalid HMAC signature',
+      );
+    });
+
+    it('should reject when body is tampered after signing', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const originalBody = '{"context":"original","query":"test"}';
+      const { ctx, request } = createHmacContext(apiKey, nodeId, originalBody);
+      // Tamper with the body after signing
+      request.rawBody = Buffer.from('{"context":"tampered","query":"test"}');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Invalid HMAC signature',
+      );
+    });
+
+    it('should reject unknown node ID', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(null);
+
+      const { ctx } = createHmacContext(apiKey, 'non-existent-node');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow('Unknown node');
+    });
+
+    it('should reject decertified node', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue({
+        ...certifiedNode,
+        status: 'decertified',
+      });
+
+      const { ctx } = createHmacContext(apiKey, nodeId);
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Node is not certified',
+      );
+    });
+
+    it('should reject node with expired certification', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue({
+        ...certifiedNode,
+        certificationExpiresAt: new Date(Date.now() - 86400000), // expired
+      });
+
+      const { ctx } = createHmacContext(apiKey, nodeId);
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Node is not certified',
+      );
+    });
+
+    it('should reject when Vault key retrieval fails', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockRejectedValue(new Error('Vault error'));
+
+      const { ctx } = createHmacContext(apiKey, nodeId);
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Failed to retrieve node key',
+      );
+    });
+
+    it('should reject missing HMAC headers', async () => {
+      // Has signature but missing timestamp and key-id
+      const { ctx } = createMockContext({
+        'x-hmac-signature': 'some-sig',
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Missing HMAC headers',
+      );
+    });
+
+    it('should reject invalid (non-numeric) timestamp', async () => {
+      const { ctx } = createMockContext({
+        'x-hmac-signature': 'some-sig',
+        'x-hmac-timestamp': 'not-a-number',
+        'x-hmac-key-id': nodeId,
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        'Invalid HMAC timestamp',
+      );
+    });
+
+    it('should fall through to Bearer when no HMAC headers present', async () => {
+      const { ctx } = createBearerContext('Bearer key-1');
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(mockPrisma.node.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty body (GET-like requests)', async () => {
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const { ctx, request } = createHmacContext(apiKey, nodeId, '');
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(request.nodeId).toBe(nodeId);
     });
   });
 });
