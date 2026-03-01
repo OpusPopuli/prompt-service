@@ -22,7 +22,7 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3100);
+  const port = configService.get<number>('PORT', 3200);
 
   await app.listen(port);
   console.log(`Prompt Service running on port ${port}`);

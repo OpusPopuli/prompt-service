@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PromptsController } from './prompts.controller';
 import { PromptsService } from './prompts.service';
 import { PrismaService } from '../common/prisma.service';
+import { VaultService } from '../common/vault.service';
 
 describe('PromptsController', () => {
   let controller: PromptsController;
@@ -28,6 +29,10 @@ describe('PromptsController', () => {
         {
           provide: PrismaService,
           useValue: { node: { findFirst: jest.fn() } },
+        },
+        {
+          provide: VaultService,
+          useValue: { getSecretsByPrefix: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile();

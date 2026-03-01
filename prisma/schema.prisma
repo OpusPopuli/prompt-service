@@ -100,6 +100,8 @@ model Node {
   region                 String
   publicKey              String?   @map("public_key")
   apiKey                 String    @unique @map("api_key")
+  apiKeyHash             String?   @map("api_key_hash")
+  apiKeySecretId         String?   @map("api_key_secret_id")
   status                 String    @default("pending") // pending, certified, decertified, expired
   certifiedAt            DateTime? @map("certified_at") @db.Timestamptz
   certificationExpiresAt DateTime? @map("certification_expires_at") @db.Timestamptz
@@ -112,6 +114,7 @@ model Node {
   @@index([region])
   @@index([status])
   @@index([apiKey])
+  @@index([apiKeyHash])
   @@map("nodes")
 }
 

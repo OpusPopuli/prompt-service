@@ -1,5 +1,6 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
 import { ApiKeyGuard } from './api-key.guard';
 
 function createMockPrisma() {
@@ -7,6 +8,14 @@ function createMockPrisma() {
     node: {
       findFirst: jest.fn(),
     },
+  };
+}
+
+function createMockVault() {
+  return {
+    getSecretsByPrefix: jest.fn().mockResolvedValue([]),
+    createSecret: jest.fn(),
+    deleteSecret: jest.fn(),
   };
 }
 
@@ -26,13 +35,19 @@ function createMockContext(authHeader?: string) {
 describe('ApiKeyGuard', () => {
   let guard: ApiKeyGuard;
   let mockPrisma: ReturnType<typeof createMockPrisma>;
+  let mockVault: ReturnType<typeof createMockVault>;
 
   beforeEach(() => {
     const configService = {
       get: jest.fn().mockReturnValue('ca:key-1,tx:key-2,ny:key-3'),
     } as unknown as ConfigService;
     mockPrisma = createMockPrisma();
-    guard = new ApiKeyGuard(configService, mockPrisma as never);
+    mockVault = createMockVault();
+    guard = new ApiKeyGuard(
+      configService,
+      mockPrisma as never,
+      mockVault as never,
+    );
   });
 
   it('should allow a valid env var API key', async () => {
@@ -79,6 +94,7 @@ describe('ApiKeyGuard', () => {
     const emptyGuard = new ApiKeyGuard(
       configService,
       createMockPrisma() as never,
+      createMockVault() as never,
     );
 
     const { ctx } = createMockContext('Bearer some-key');
@@ -95,6 +111,7 @@ describe('ApiKeyGuard', () => {
     const colonGuard = new ApiKeyGuard(
       configService,
       createMockPrisma() as never,
+      createMockVault() as never,
     );
 
     const { ctx, request } = createMockContext('Bearer key:with:colons');
@@ -111,6 +128,7 @@ describe('ApiKeyGuard', () => {
     const legacyGuard = new ApiKeyGuard(
       configService,
       createMockPrisma() as never,
+      createMockVault() as never,
     );
 
     const { ctx, request } = createMockContext('Bearer legacy-key');
@@ -122,19 +140,40 @@ describe('ApiKeyGuard', () => {
   });
 
   describe('DB-backed node keys', () => {
-    it('should authenticate with a valid certified node API key', async () => {
+    it('should authenticate with a valid certified node via hash lookup', async () => {
+      const nodeKey = 'node-api-key';
+      const nodeKeyHash = createHash('sha256').update(nodeKey).digest('hex');
+
       mockPrisma.node.findFirst.mockResolvedValue({
         id: 'node-uuid-1',
         region: 'ca',
-        apiKey: 'node-api-key',
+        apiKeyHash: nodeKeyHash,
         status: 'certified',
       });
-      const { ctx, request } = createMockContext('Bearer node-api-key');
+      const { ctx, request } = createMockContext(`Bearer ${nodeKey}`);
 
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
-      expect(request.apiKey).toBe('node-api-key');
+      expect(request.apiKey).toBe(nodeKey);
       expect(request.region).toBe('ca');
       expect(request.nodeId).toBe('node-uuid-1');
+    });
+
+    it('should query DB with hashed token', async () => {
+      mockPrisma.node.findFirst.mockResolvedValue(null);
+      const { ctx } = createMockContext('Bearer some-node-key');
+
+      await guard.canActivate(ctx).catch(() => {});
+
+      const expectedHash = createHash('sha256')
+        .update('some-node-key')
+        .digest('hex');
+      expect(mockPrisma.node.findFirst).toHaveBeenCalledWith({
+        where: {
+          apiKeyHash: expectedHash,
+          status: 'certified',
+          certificationExpiresAt: { gt: expect.any(Date) },
+        },
+      });
     });
 
     it('should query DB only when key not found in env vars', async () => {
@@ -154,23 +193,7 @@ describe('ApiKeyGuard', () => {
       );
     });
 
-    it('should query with correct certified + non-expired criteria', async () => {
-      mockPrisma.node.findFirst.mockResolvedValue(null);
-      const { ctx } = createMockContext('Bearer some-node-key');
-
-      await guard.canActivate(ctx).catch(() => {});
-
-      expect(mockPrisma.node.findFirst).toHaveBeenCalledWith({
-        where: {
-          apiKey: 'some-node-key',
-          status: 'certified',
-          certificationExpiresAt: { gt: expect.any(Date) },
-        },
-      });
-    });
-
     it('should reject expired node certification (DB returns null for expired)', async () => {
-      // When certificationExpiresAt is in the past, findFirst returns null
       mockPrisma.node.findFirst.mockResolvedValue(null);
       const { ctx } = createMockContext('Bearer expired-node-key');
 
@@ -180,7 +203,6 @@ describe('ApiKeyGuard', () => {
     });
 
     it('should reject pending node key (DB returns null for non-certified)', async () => {
-      // When status is 'pending', findFirst returns null
       mockPrisma.node.findFirst.mockResolvedValue(null);
       const { ctx } = createMockContext('Bearer pending-node-key');
 
@@ -196,6 +218,49 @@ describe('ApiKeyGuard', () => {
 
       expect(request.nodeId).toBeUndefined();
       expect(request.region).toBe('ny');
+    });
+  });
+
+  describe('Vault key loading', () => {
+    it('should load region keys from Vault on init', async () => {
+      mockVault.getSecretsByPrefix.mockResolvedValue([
+        { name: 'region_key_fl', secret: 'vault-fl-key' },
+        { name: 'region_key_wa', secret: 'vault-wa-key' },
+      ]);
+
+      await guard.onModuleInit();
+
+      const { ctx, request } = createMockContext('Bearer vault-fl-key');
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(request.region).toBe('fl');
+    });
+
+    it('should fall back to env var keys when Vault fails', async () => {
+      mockVault.getSecretsByPrefix.mockRejectedValue(
+        new Error('Vault unavailable'),
+      );
+
+      await guard.onModuleInit();
+
+      // Env var keys should still work
+      const { ctx } = createMockContext('Bearer key-1');
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('should merge Vault keys with env var keys', async () => {
+      mockVault.getSecretsByPrefix.mockResolvedValue([
+        { name: 'region_key_fl', secret: 'vault-fl-key' },
+      ]);
+
+      await guard.onModuleInit();
+
+      // Env var key still works
+      const { ctx: ctx1 } = createMockContext('Bearer key-1');
+      await expect(guard.canActivate(ctx1)).resolves.toBe(true);
+
+      // Vault key also works
+      const { ctx: ctx2 } = createMockContext('Bearer vault-fl-key');
+      await expect(guard.canActivate(ctx2)).resolves.toBe(true);
     });
   });
 });
