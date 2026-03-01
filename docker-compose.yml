@@ -1,6 +1,7 @@
 services:
-  prompt-db:
-    image: postgres:16-alpine
+  opuspopuli-prompts-db:
+    image: postgres:17-alpine
+    container_name: opuspopuli-prompts-db
     environment:
       POSTGRES_DB: prompt_service
       POSTGRES_USER: postgres
@@ -8,26 +9,29 @@ services:
     ports:
       - '5433:5432'
     volumes:
-      - prompt-db-data:/var/lib/postgresql/data
+      - opuspopuli-prompts-db-data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 5s
       retries: 5
 
-  prompt-service:
+  opuspopuli-prompts:
     build: .
+    image: opuspopuli-prompts
+    container_name: opuspopuli-prompts
     ports:
       - '3100:3100'
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@prompt-db:5432/prompt_service?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@opuspopuli-prompts-db:5432/prompt_service?schema=public
       API_KEYS: dev-key-1,dev-key-2
       ADMIN_API_KEYS: admin-dev-key-1
       PROMPT_TTL_SECONDS: 3600
       PORT: 3100
     depends_on:
-      prompt-db:
+      opuspopuli-prompts-db:
         condition: service_healthy
 
 volumes:
-  prompt-db-data:
+  opuspopuli-prompts-db-data:
+    name: opuspopuli-prompts-db-data

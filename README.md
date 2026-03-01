@@ -19,9 +19,9 @@ The open-source `prompt-client` package in the main repo already supports remote
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - pnpm
-- PostgreSQL 16+ (or use Docker)
+- PostgreSQL 17+ (or use Docker)
 
 ### With Docker (recommended)
 
@@ -112,17 +112,30 @@ curl -X POST http://localhost:3100/prompts/document-analysis \
 | `POST` | `/admin/experiments/:id/activate` | Activate experiment |
 | `POST` | `/admin/experiments/:id/stop` | Stop experiment |
 
-Interactive API docs are available at `http://localhost:3100/api` (Swagger UI).
+### Admin: Node Registry (Admin API Key)
 
-See [docs/api-reference.md](docs/api-reference.md) for full request/response schemas.
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/admin/nodes` | Register a new node (generates API key) |
+| `GET` | `/admin/nodes` | List nodes (filter by region, status) |
+| `GET` | `/admin/nodes/health` | Node health dashboard |
+| `GET` | `/admin/nodes/:id` | Get node details with audit log |
+| `PATCH` | `/admin/nodes/:id` | Update node metadata |
+| `POST` | `/admin/nodes/:id/certify` | Certify node (enable API key) |
+| `POST` | `/admin/nodes/:id/decertify` | Decertify node (revoke access) |
+| `POST` | `/admin/nodes/:id/recertify` | Renew certification |
+| `POST` | `/admin/nodes/:id/rotate-key` | Rotate node API key |
+| `DELETE` | `/admin/nodes/:id` | Delete node |
+
+Interactive API docs are available at `http://localhost:3100/api` (Swagger UI).
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `API_KEYS` | Yes | — | Comma-separated list of valid node API keys |
-| `ADMIN_API_KEYS` | Yes | — | Comma-separated list of valid admin API keys |
+| `API_KEYS` | Yes | — | Comma-separated `region:key` pairs (e.g., `ca:key-1,tx:key-2`) |
+| `ADMIN_API_KEYS` | Yes | — | Comma-separated admin API keys |
 | `PROMPT_TTL_SECONDS` | No | `3600` | Prompt expiry TTL in seconds (nodes must re-fetch after) |
 | `PORT` | No | `3100` | Server port |
 
@@ -141,6 +154,10 @@ See [docs/api-reference.md](docs/api-reference.md) for full request/response sch
 | `pnpm db:migrate:deploy` | Run pending migrations (production) |
 | `pnpm db:seed` | Seed all 13 prompt templates |
 | `pnpm db:studio` | Open Prisma Studio GUI |
+| `pnpm integration:up` | Start integration test stack (Docker) |
+| `pnpm integration:down` | Tear down integration test stack |
+| `pnpm test:integration` | Run integration tests (requires stack running) |
+| `pnpm test:integration:docker` | Run full integration test suite in Docker |
 
 ## Project Structure
 
@@ -151,7 +168,7 @@ prompt-service/
 │   └── seed.ts                # Seeds all 13 prompt templates
 ├── src/
 │   ├── auth/
-│   │   ├── api-key.guard.ts   # Node API key validation
+│   │   ├── api-key.guard.ts   # Node API key validation (env + DB node keys)
 │   │   └── admin-key.guard.ts # Admin API key validation
 │   ├── common/
 │   │   ├── prisma.module.ts   # Global Prisma provider
@@ -164,17 +181,22 @@ prompt-service/
 │   │   ├── prompts.module.ts
 │   │   └── prompts.service.ts # Template lookup, A/B resolution, interpolation, hashing
 │   ├── admin/
-│   │   ├── dto/               # Admin request DTOs (create, update, rollback, experiment)
+│   │   ├── dto/               # Admin request DTOs
 │   │   ├── admin.controller.ts           # Template CRUD endpoints
 │   │   ├── experiments-admin.controller.ts  # Experiment lifecycle endpoints
+│   │   ├── node-registry.controller.ts   # Node registration & certification
 │   │   ├── admin.service.ts   # Template & experiment business logic
+│   │   ├── node-registry.service.ts      # Node lifecycle management
 │   │   └── admin.module.ts
 │   ├── experiments/
 │   │   ├── experiments.service.ts   # A/B bucketing engine
 │   │   └── experiments.module.ts    # Global experiment provider
 │   ├── app.module.ts          # Root module
 │   └── main.ts                # Bootstrap + Swagger setup
+├── postman/                   # Postman collection & environment
+├── test/integration/          # Docker-based integration tests
 ├── docker-compose.yml         # Local dev stack
+├── docker-compose-integration.yml  # Integration test stack
 ├── Dockerfile                 # Production image
 └── .github/workflows/ci.yml   # GitHub Actions CI
 ```
@@ -200,6 +222,17 @@ The service ships with 13 seeded templates across 3 categories:
 
 **RAG** (1 template) — Used for knowledge retrieval Q&A:
 - `rag` — Context-grounded answer generation
+
+## Postman Collection
+
+A complete Postman collection is available in [`postman/`](postman/) with 26 requests covering all endpoints:
+
+1. Import `postman/prompt-service.postman_collection.json` into Postman
+2. Import `postman/prompt-service.postman_environment.json` as an environment
+3. Select the "Prompt Service - Local" environment
+4. Run the Health Check request to verify connectivity
+
+The collection includes test scripts that validate responses and auto-capture IDs for request chaining.
 
 ## Integration with Opus Populi
 
