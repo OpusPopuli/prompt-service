@@ -1,5 +1,5 @@
 export const BASE_URL =
-  process.env.PROMPT_SERVICE_URL || 'http://localhost:3101';
+  process.env.PROMPT_SERVICE_URL || 'http://localhost:3201';
 
 export const API_KEY = process.env.API_KEY || 'test-api-key-1';
 export const API_KEY_REGION = 'ca';

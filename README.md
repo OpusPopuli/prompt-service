@@ -29,7 +29,7 @@ The open-source `prompt-client` package in the main repo already supports remote
 docker compose up -d
 ```
 
-This starts PostgreSQL on port 5433 and the service on port 3100. The service automatically runs migrations on startup.
+This starts PostgreSQL on port 5433 and the service on port 3200. The service automatically runs migrations on startup.
 
 Seed the templates:
 
@@ -70,10 +70,10 @@ pnpm start:dev
 
 ```bash
 # Health check (no auth required)
-curl http://localhost:3100/health
+curl http://localhost:3200/health
 
 # Fetch a prompt (requires API key)
-curl -X POST http://localhost:3100/prompts/document-analysis \
+curl -X POST http://localhost:3200/prompts/document-analysis \
   -H "Authorization: Bearer dev-key-1" \
   -H "Content-Type: application/json" \
   -d '{"documentType": "petition", "text": "We the people request..."}'
@@ -127,7 +127,7 @@ curl -X POST http://localhost:3100/prompts/document-analysis \
 | `POST` | `/admin/nodes/:id/rotate-key` | Rotate node API key |
 | `DELETE` | `/admin/nodes/:id` | Delete node |
 
-Interactive API docs are available at `http://localhost:3100/api` (Swagger UI).
+Interactive API docs are available at `http://localhost:3200/api` (Swagger UI).
 
 ## Environment Variables
 
@@ -137,7 +137,7 @@ Interactive API docs are available at `http://localhost:3100/api` (Swagger UI).
 | `API_KEYS` | Yes | — | Comma-separated `region:key` pairs (e.g., `ca:key-1,tx:key-2`) |
 | `ADMIN_API_KEYS` | Yes | — | Comma-separated admin API keys |
 | `PROMPT_TTL_SECONDS` | No | `3600` | Prompt expiry TTL in seconds (nodes must re-fetch after) |
-| `PORT` | No | `3100` | Server port |
+| `PORT` | No | `3200` | Server port |
 
 ## Scripts
 

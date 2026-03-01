@@ -1,6 +1,6 @@
 services:
   opuspopuli-prompts-db:
-    image: postgres:17-alpine
+    image: supabase/postgres:17.6.1.091
     container_name: opuspopuli-prompts-db
     environment:
       POSTGRES_DB: prompt_service
@@ -10,6 +10,9 @@ services:
       - '5433:5432'
     volumes:
       - opuspopuli-prompts-db-data:/var/lib/postgresql/data
+      - ./supabase/roles.sql:/docker-entrypoint-initdb.d/ll-init-roles.sql:ro
+      - ./supabase/migrate.sh:/docker-entrypoint-initdb.d/migrate.sh:ro
+      - ./supabase/init.sql:/docker-entrypoint-initdb.d/zz-init-vault.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -21,13 +24,13 @@ services:
     image: opuspopuli-prompts
     container_name: opuspopuli-prompts
     ports:
-      - '3100:3100'
+      - '3200:3200'
     environment:
       DATABASE_URL: postgresql://postgres:postgres@opuspopuli-prompts-db:5432/prompt_service?schema=public
       API_KEYS: dev-key-1,dev-key-2
       ADMIN_API_KEYS: admin-dev-key-1
       PROMPT_TTL_SECONDS: 3600
-      PORT: 3100
+      PORT: 3200
     depends_on:
       opuspopuli-prompts-db:
         condition: service_healthy

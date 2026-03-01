@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../common/prisma.service';
+import { VaultService } from '../common/vault.service';
 import { CreateNodeDto } from './dto/create-node.dto';
 import { UpdateNodeDto } from './dto/update-node.dto';
 import { ListNodesQueryDto } from './dto/list-nodes-query.dto';
@@ -13,36 +15,66 @@ import { DecertifyNodeDto } from './dto/decertify-node.dto';
 
 @Injectable()
 export class NodeRegistryService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(NodeRegistryService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vault: VaultService,
+  ) {}
 
   private generateApiKey(): string {
     return randomBytes(32).toString('hex');
   }
 
+  private hashApiKey(apiKey: string): string {
+    return createHash('sha256').update(apiKey).digest('hex');
+  }
+
   async registerNode(dto: CreateNodeDto, adminKeyPrefix: string) {
     const apiKey = this.generateApiKey();
+    const apiKeyHash = this.hashApiKey(apiKey);
 
-    return this.prisma.$transaction(async (tx) => {
-      const node = await tx.node.create({
+    const node = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.node.create({
         data: {
           name: dto.name,
           region: dto.region,
           publicKey: dto.publicKey ?? null,
           apiKey,
+          apiKeyHash,
           status: 'pending',
         },
       });
 
       await tx.nodeAuditLog.create({
         data: {
-          nodeId: node.id,
+          nodeId: created.id,
           action: 'registered',
           performedBy: adminKeyPrefix,
         },
       });
 
-      return node;
+      return created;
     });
+
+    // Store plaintext key in Vault after transaction commits
+    try {
+      const secretId = await this.vault.createSecret(
+        apiKey,
+        `node_key_${node.id}`,
+        `API key for node ${node.name}`,
+      );
+      await this.prisma.node.update({
+        where: { id: node.id },
+        data: { apiKeySecretId: secretId },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to store API key in Vault for node ${node.id}: ${error}`,
+      );
+    }
+
+    return node;
   }
 
   async listNodes(query: ListNodesQueryDto) {
@@ -182,15 +214,19 @@ export class NodeRegistryService {
   }
 
   async rotateApiKey(id: string, adminKeyPrefix: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const node = await tx.node.findUnique({ where: { id } });
-      if (!node) throw new NotFoundException(`Node ${id} not found`);
+    const existingNode = await this.prisma.node.findUnique({ where: { id } });
+    if (!existingNode) throw new NotFoundException(`Node ${id} not found`);
 
-      const newApiKey = this.generateApiKey();
+    const newApiKey = this.generateApiKey();
+    const newApiKeyHash = this.hashApiKey(newApiKey);
 
+    const node = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.node.update({
         where: { id },
-        data: { apiKey: newApiKey },
+        data: {
+          apiKey: newApiKey,
+          apiKeyHash: newApiKeyHash,
+        },
       });
 
       await tx.nodeAuditLog.create({
@@ -203,12 +239,47 @@ export class NodeRegistryService {
 
       return updated;
     });
+
+    // Update Vault: create new secret, delete old one
+    try {
+      const secretId = await this.vault.createSecret(
+        newApiKey,
+        `node_key_${id}`,
+        `API key for node ${node.name} (rotated)`,
+      );
+      if (existingNode.apiKeySecretId) {
+        await this.vault.deleteSecret(existingNode.apiKeySecretId);
+      }
+      await this.prisma.node.update({
+        where: { id },
+        data: { apiKeySecretId: secretId },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to update Vault for key rotation on node ${id}: ${error}`,
+      );
+    }
+
+    return node;
   }
 
   async deleteNode(id: string) {
     const node = await this.prisma.node.findUnique({ where: { id } });
     if (!node) throw new NotFoundException(`Node ${id} not found`);
+
     await this.prisma.node.delete({ where: { id } });
+
+    // Clean up Vault secret
+    if (node.apiKeySecretId) {
+      try {
+        await this.vault.deleteSecret(node.apiKeySecretId);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete Vault secret for node ${id}: ${error}`,
+        );
+      }
+    }
+
     return { deleted: true };
   }
 

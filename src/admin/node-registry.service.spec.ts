@@ -30,27 +30,42 @@ function createMockPrisma() {
   };
 }
 
+function createMockVault() {
+  return {
+    createSecret: jest.fn().mockResolvedValue('vault-secret-uuid'),
+    getSecret: jest.fn(),
+    getSecretByName: jest.fn(),
+    getSecretsByPrefix: jest.fn().mockResolvedValue([]),
+    updateSecret: jest.fn(),
+    deleteSecret: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('NodeRegistryService', () => {
   let service: NodeRegistryService;
   let prisma: ReturnType<typeof createMockPrisma>;
+  let vault: ReturnType<typeof createMockVault>;
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new NodeRegistryService(prisma as never);
+    vault = createMockVault();
+    service = new NodeRegistryService(prisma as never, vault as never);
   });
 
   describe('registerNode', () => {
-    it('should create node with generated API key and audit log', async () => {
+    it('should create node with generated API key, hash, and audit log', async () => {
       const dto = { name: 'node-ca-01', region: 'ca' };
       const created = {
         id: 'uuid-1',
         ...dto,
         apiKey: 'generated-key',
+        apiKeyHash: 'generated-hash',
         status: 'pending',
       };
 
       prisma._tx.node.create.mockResolvedValue(created);
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      prisma.node.update.mockResolvedValue(created);
 
       const result = await service.registerNode(dto, 'admin-te...');
 
@@ -62,6 +77,7 @@ describe('NodeRegistryService', () => {
           publicKey: null,
           status: 'pending',
           apiKey: expect.any(String),
+          apiKeyHash: expect.any(String),
         }),
       });
       expect(prisma._tx.nodeAuditLog.create).toHaveBeenCalledWith({
@@ -70,6 +86,29 @@ describe('NodeRegistryService', () => {
           action: 'registered',
           performedBy: 'admin-te...',
         },
+      });
+    });
+
+    it('should store API key in Vault after registration', async () => {
+      const dto = { name: 'node-ca-01', region: 'ca' };
+      prisma._tx.node.create.mockResolvedValue({
+        id: 'uuid-1',
+        name: 'node-ca-01',
+        apiKey: 'gen-key',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      prisma.node.update.mockResolvedValue({});
+
+      await service.registerNode(dto, 'admin...');
+
+      expect(vault.createSecret).toHaveBeenCalledWith(
+        expect.any(String),
+        'node_key_uuid-1',
+        'API key for node node-ca-01',
+      );
+      expect(prisma.node.update).toHaveBeenCalledWith({
+        where: { id: 'uuid-1' },
+        data: { apiKeySecretId: 'vault-secret-uuid' },
       });
     });
 
@@ -83,6 +122,20 @@ describe('NodeRegistryService', () => {
       expect(prisma._tx.node.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ publicKey: 'pk-123' }),
       });
+    });
+
+    it('should handle Vault failure gracefully', async () => {
+      const dto = { name: 'node-ca-01', region: 'ca' };
+      prisma._tx.node.create.mockResolvedValue({
+        id: 'uuid-1',
+        name: 'node-ca-01',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      vault.createSecret.mockRejectedValue(new Error('Vault unavailable'));
+
+      // Should not throw
+      const result = await service.registerNode(dto, 'admin...');
+      expect(result).toBeDefined();
     });
   });
 
@@ -101,6 +154,17 @@ describe('NodeRegistryService', () => {
 
       const createCall = prisma._tx.node.create.mock.calls[0][0];
       expect(createCall.data.apiKey).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('should generate a valid SHA-256 hash alongside the key', async () => {
+      const dto = { name: 'node-hash-test', region: 'ca' };
+      prisma._tx.node.create.mockResolvedValue({ id: '1' });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      await service.registerNode(dto, 'admin...');
+
+      const createCall = prisma._tx.node.create.mock.calls[0][0];
+      expect(createCall.data.apiKeyHash).toMatch(/^[a-f0-9]{64}$/);
     });
 
     it('should generate unique keys on each call', async () => {
@@ -412,22 +476,28 @@ describe('NodeRegistryService', () => {
   });
 
   describe('rotateApiKey', () => {
-    it('should generate a new API key and create audit log', async () => {
-      prisma._tx.node.findUnique.mockResolvedValue({
+    it('should generate a new API key with hash and create audit log', async () => {
+      prisma.node.findUnique.mockResolvedValue({
         id: '1',
         apiKey: 'old-key',
+        apiKeySecretId: 'old-secret-id',
       });
       prisma._tx.node.update.mockResolvedValue({
         id: '1',
+        name: 'test-node',
         apiKey: 'new-key',
       });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      prisma.node.update.mockResolvedValue({});
 
       const result = await service.rotateApiKey('1', 'admin...');
 
       expect(prisma._tx.node.update).toHaveBeenCalledWith({
         where: { id: '1' },
-        data: { apiKey: expect.any(String) },
+        data: {
+          apiKey: expect.any(String),
+          apiKeyHash: expect.any(String),
+        },
       });
       expect(prisma._tx.nodeAuditLog.create).toHaveBeenCalledWith({
         data: {
@@ -439,8 +509,31 @@ describe('NodeRegistryService', () => {
       expect(result.apiKey).toBeDefined();
     });
 
+    it('should store new key in Vault and delete old secret', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        apiKey: 'old-key',
+        apiKeySecretId: 'old-secret-id',
+      });
+      prisma._tx.node.update.mockResolvedValue({
+        id: '1',
+        name: 'test-node',
+      });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      prisma.node.update.mockResolvedValue({});
+
+      await service.rotateApiKey('1', 'admin...');
+
+      expect(vault.createSecret).toHaveBeenCalledWith(
+        expect.any(String),
+        'node_key_1',
+        expect.stringContaining('rotated'),
+      );
+      expect(vault.deleteSecret).toHaveBeenCalledWith('old-secret-id');
+    });
+
     it('should throw NotFoundException when not found', async () => {
-      prisma._tx.node.findUnique.mockResolvedValue(null);
+      prisma.node.findUnique.mockResolvedValue(null);
 
       await expect(
         service.rotateApiKey('nonexistent', 'admin...'),
@@ -449,14 +542,30 @@ describe('NodeRegistryService', () => {
   });
 
   describe('deleteNode', () => {
-    it('should delete node and return confirmation', async () => {
-      prisma.node.findUnique.mockResolvedValue({ id: '1' });
+    it('should delete node, clean up Vault secret, and return confirmation', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        apiKeySecretId: 'secret-id',
+      });
       prisma.node.delete.mockResolvedValue({});
 
       const result = await service.deleteNode('1');
 
       expect(result).toEqual({ deleted: true });
       expect(prisma.node.delete).toHaveBeenCalledWith({ where: { id: '1' } });
+      expect(vault.deleteSecret).toHaveBeenCalledWith('secret-id');
+    });
+
+    it('should skip Vault cleanup when no secret ID', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        apiKeySecretId: null,
+      });
+      prisma.node.delete.mockResolvedValue({});
+
+      await service.deleteNode('1');
+
+      expect(vault.deleteSecret).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when not found', async () => {

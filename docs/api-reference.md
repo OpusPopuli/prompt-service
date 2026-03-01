@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `http://localhost:3100` (development) or configured deployment URL.
+Base URL: `http://localhost:3200` (development) or configured deployment URL.
 
 Interactive Swagger UI available at `/api`.
 
