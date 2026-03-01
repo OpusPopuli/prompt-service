@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
 
-  prompt-service:
+  opuspopuli-prompts:
     build: .
     ports:
       - '3100:3100'

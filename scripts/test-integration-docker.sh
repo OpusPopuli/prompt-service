@@ -38,16 +38,16 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-echo -e "${YELLOW}Waiting for prompt-service health...${NC}"
+echo -e "${YELLOW}Waiting for opuspopuli-prompts health...${NC}"
 for i in $(seq 1 60); do
-  if docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec -T prompt-service \
+  if docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec -T opuspopuli-prompts \
     node -e "require('http').get('http://localhost:3100/health', (r) => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>{ const j=JSON.parse(d); process.exit(j.status==='ok' && j.activeTemplates>=12 ? 0 : 1) }) }).on('error', () => process.exit(1))" 2>/dev/null; then
     echo -e "${GREEN}Prompt service is healthy with seeded templates${NC}"
     break
   fi
   if [[ "$i" -eq 60 ]]; then
     echo -e "${RED}Prompt service failed to become healthy${NC}"
-    docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs prompt-service
+    docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs opuspopuli-prompts
     exit 1
   fi
   sleep 2
@@ -61,7 +61,7 @@ if [[ $TEST_EXIT -eq 0 ]]; then
   echo -e "\n${GREEN}=== Integration tests passed ===${NC}"
 else
   echo -e "\n${RED}=== Integration tests failed ===${NC}"
-  docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs prompt-service
+  docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs opuspopuli-prompts
 fi
 
 exit $TEST_EXIT
