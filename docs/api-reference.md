@@ -6,21 +6,91 @@ Interactive Swagger UI available at `/api`.
 
 ## Authentication
 
-All prompt endpoints require a Bearer token:
+Prompt endpoints support two authentication methods: **Bearer tokens** and **HMAC request signing**.
+
+### Bearer Token Authentication
+
+Region keys and environment variable keys use a simple Bearer token:
 
 ```
 Authorization: Bearer <API_KEY>
 ```
 
-API keys are configured via the `API_KEYS` environment variable (comma-separated). An invalid or missing token returns:
+API keys are configured via the `API_KEYS` environment variable (comma-separated `region:key` pairs).
 
-```json
-{
-  "statusCode": 401,
-  "message": "Missing or invalid Authorization header",
-  "error": "Unauthorized"
-}
+### HMAC Request Signing (Recommended for Nodes)
+
+Registered nodes should use HMAC request signing. Unlike Bearer tokens, the API key never leaves the node — each request is signed with a timestamp and body hash, providing:
+
+- **Replay protection**: Requests expire after 5 minutes
+- **Tamper detection**: Body modifications invalidate the signature
+- **Key secrecy**: The shared secret is never transmitted over the wire
+
+#### HMAC Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-HMAC-Signature` | Base64-encoded HMAC-SHA256 signature |
+| `X-HMAC-Timestamp` | Unix timestamp in seconds |
+| `X-HMAC-Key-Id` | Node UUID (used to look up the shared secret) |
+
+#### Signature Construction
+
 ```
+signatureString = "${timestamp}\n${method}\n${path}\n${bodyHash}"
+```
+
+Where:
+- `timestamp`: Same value as `X-HMAC-Timestamp`
+- `method`: Uppercase HTTP method (e.g., `POST`)
+- `path`: Request path (e.g., `/prompts/rag`)
+- `bodyHash`: SHA-256 hex digest of the raw request body (empty string hash for no body)
+
+The signature is computed as:
+```
+HMAC-SHA256(apiKey, signatureString) → Base64
+```
+
+#### Example (Node.js)
+
+```typescript
+import { createHash, createHmac } from 'node:crypto';
+
+const timestamp = Math.floor(Date.now() / 1000).toString();
+const method = 'POST';
+const path = '/prompts/rag';
+const body = JSON.stringify({ context: '...', query: '...' });
+
+const bodyHash = createHash('sha256').update(body).digest('hex');
+const signatureString = `${timestamp}\n${method}\n${path}\n${bodyHash}`;
+const signature = createHmac('sha256', apiKey)
+  .update(signatureString)
+  .digest('base64');
+
+// Send with headers:
+// X-HMAC-Signature: <signature>
+// X-HMAC-Timestamp: <timestamp>
+// X-HMAC-Key-Id: <nodeId>
+```
+
+#### Validation Rules
+
+- Timestamp must be within ±5 minutes of server time
+- Signature uses constant-time comparison (timing-attack safe)
+- Node must be certified and not expired
+- API key is retrieved from Vault using the node's `apiKeySecretId`
+
+#### Error Responses
+
+| Message | Cause |
+|---------|-------|
+| `Missing HMAC headers` | Signature header present but timestamp or key-id missing |
+| `Invalid HMAC timestamp` | Timestamp is not a valid number |
+| `HMAC timestamp expired` | Timestamp outside ±5 minute window |
+| `Unknown node` | Node UUID not found in database |
+| `Node is not certified` | Node is pending, decertified, or certification expired |
+| `Failed to retrieve node key` | Vault lookup failed |
+| `Invalid HMAC signature` | Signature mismatch (wrong key, tampered body, etc.) |
 
 ### Admin Authentication
 

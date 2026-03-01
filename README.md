@@ -81,7 +81,9 @@ curl -X POST http://localhost:3200/prompts/document-analysis \
 
 ## API Endpoints
 
-### Prompt Serving (Node API Key)
+### Prompt Serving (Node API Key or HMAC)
+
+Prompt endpoints support **Bearer token** auth (region/env var keys) and **HMAC request signing** (registered nodes). HMAC is recommended for federated nodes — the API key never leaves the node, and requests include replay protection and tamper detection. See [API Reference](docs/api-reference.md#hmac-request-signing-recommended-for-nodes) for details.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -168,9 +170,10 @@ prompt-service/
 │   └── seed.ts                # Seeds all 13 prompt templates
 ├── src/
 │   ├── auth/
-│   │   ├── api-key.guard.ts   # Node API key validation (env + DB node keys)
+│   │   ├── api-key.guard.ts   # Node auth: Bearer tokens + HMAC request signing
 │   │   └── admin-key.guard.ts # Admin API key validation
 │   ├── common/
+│   │   ├── crypto.utils.ts    # Constant-time comparison, string helpers
 │   │   ├── prisma.module.ts   # Global Prisma provider
 │   │   └── prisma.service.ts  # Prisma client lifecycle
 │   ├── health/

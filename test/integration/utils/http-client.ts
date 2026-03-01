@@ -1,3 +1,4 @@
+import { createHash, createHmac } from 'node:crypto';
 import { BASE_URL, API_KEY, ADMIN_API_KEY } from './config';
 
 interface RequestOptions {
@@ -70,3 +71,29 @@ export const adminPatch = (path: string, opts?: RequestOptions) =>
   patch(path, { ...opts, headers: withAuth(ADMIN_API_KEY, opts?.headers) });
 export const adminDelete = (path: string, opts?: RequestOptions) =>
   del(path, { ...opts, headers: withAuth(ADMIN_API_KEY, opts?.headers) });
+
+// HMAC-signed requests (node HMAC auth)
+export function hmacPost(
+  path: string,
+  body: unknown,
+  apiKey: string,
+  nodeId: string,
+): Promise<HttpResponse> {
+  const method = 'POST';
+  const bodyStr = JSON.stringify(body);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
+  const signatureString = `${timestamp}\n${method}\n${path}\n${bodyHash}`;
+  const signature = createHmac('sha256', apiKey)
+    .update(signatureString)
+    .digest('base64');
+
+  return request(method, path, {
+    body,
+    headers: {
+      'x-hmac-signature': signature,
+      'x-hmac-timestamp': timestamp,
+      'x-hmac-key-id': nodeId,
+    },
+  });
+}
