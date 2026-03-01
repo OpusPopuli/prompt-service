@@ -1,6 +1,6 @@
 services:
   prompt-db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: prompt_service
       POSTGRES_USER: postgres
@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
 
-  prompt-service:
+  opuspopuli-prompts:
     build: .
     ports:
       - '3100:3100'

@@ -25,10 +25,12 @@ All prompt-serving endpoints require a Bearer token in the `Authorization` heade
 Authorization: Bearer <API_KEY>
 ```
 
-- API keys are configured via the `API_KEYS` environment variable (comma-separated)
-- Keys are validated by `ApiKeyGuard` (`src/auth/api-key.guard.ts`)
-- Invalid or missing tokens return `401 Unauthorized`
-- The API key is attached to the request context for analytics logging and A/B experiment bucketing
+API keys are validated by `ApiKeyGuard` (`src/auth/api-key.guard.ts`) using a dual-source strategy:
+
+1. **Environment variable (fast path)**: Keys from `API_KEYS` env var (format: `region:key`, comma-separated). Used for development and initial bootstrap.
+2. **Node registry (database)**: Keys generated via the node registration system. The guard checks the `nodes` table for a certified node with a valid (non-expired) certification. This is the primary auth method in production.
+
+Both sources extract the **region** from the key context (env var prefix or node record) and attach it to the request for analytics logging and A/B experiment bucketing. Invalid or missing tokens return `401 Unauthorized`.
 
 ### Admin API Key Authentication
 
@@ -43,12 +45,25 @@ Authorization: Bearer <ADMIN_API_KEY>
 - Node API keys **cannot** access admin endpoints, and admin keys **cannot** access prompt-serving endpoints
 - This separation ensures a compromised node cannot modify templates or experiments
 
+### Node Registry & Certification
+
+Nodes are managed through a registration and certification lifecycle:
+
+- **Registration**: Admin registers a node with a name and region. A cryptographically random API key (32 bytes, hex-encoded) is generated and returned.
+- **Certification**: Admin certifies the node with a configurable expiration period (default: 365 days). Only certified nodes with valid (non-expired) certifications can access prompt endpoints.
+- **Decertification**: Admin revokes a node's access with a required reason. The node's API key is immediately invalidated.
+- **Recertification**: Admin renews an expired or decertified node's certification.
+- **Key rotation**: Admin generates a new API key for a node without changing its certification status.
+
+All lifecycle events are recorded in the `node_audit_logs` table with the action, reason, and admin key prefix — creating an immutable audit trail.
+
 ### What is logged
 
 Every prompt request logs:
 - Endpoint called (`structural-analysis`, `document-analysis`, `rag`)
 - Prompt template version served
 - API key prefix (first 8 characters + `...`) — **not the full key**
+- Region (extracted from API key configuration or node record)
 - A/B experiment ID and variant name (if the request was part of an experiment)
 - Timestamp
 
@@ -186,13 +201,14 @@ In the federated Opus Populi network:
 
 | Threat | Mitigation |
 |--------|-----------|
-| Unauthorized prompt access | Bearer token authentication; API keys rotatable |
+| Unauthorized prompt access | Bearer token authentication; node certification with expiration; API keys rotatable |
 | Unauthorized template modification | Separate admin API keys; node keys cannot access admin endpoints |
+| Rogue node in federation | Node certification lifecycle with expiration; decertification with immediate key invalidation; audit trail of all lifecycle events |
 | Experiment tampering | Admin-only experiment controls; immutable variant-to-version linkage |
 | Prompt scraping | Rate limiting (30 req/min per endpoint per key) |
 | Prompt tampering in transit | SHA-256 hash verification via `/prompts/verify` |
 | Node modifying prompts locally | Prompt lock verification in `prompt-client` (planned, see Issue #426) |
-| API key compromise | Key prefix logging enables identification; revocation via env var update |
+| API key compromise | Key prefix logging enables identification; key rotation via `/admin/nodes/:id/rotate-key`; decertification for immediate revocation |
 | Database compromise | Templates are text (no secrets); version history enables forensic audit |
 | Insider threat (rogue prompt edit) | Version history with full diff trail; no delete capability |
 | LLM output manipulation | Canary system compares outputs across nodes (planned, see Issue #429) |
@@ -201,11 +217,13 @@ In the federated Opus Populi network:
 
 1. **No mutual TLS**: Node-to-service communication uses Bearer tokens over HTTPS, not mTLS. This is acceptable for the current deployment model (internal Docker network) but should be revisited for multi-host federation.
 
-2. **Static API keys**: Keys are configured via environment variable, not a dynamic key management system. Key rotation requires a service restart. Future work (Issue #428) adds a node registry with dynamic key provisioning.
+2. **No request signing**: Requests are authenticated but not signed. A compromised node could replay requests. Future work adds HMAC request signing.
 
-3. **No request signing**: Requests are authenticated but not signed. A compromised node could replay requests. Future work adds HMAC request signing.
+3. **Template text in responses**: The rendered prompt (including the template structure) is returned to nodes. This is by design — nodes need the full prompt to send to their LLM. The mitigation is rate limiting and key-based access control.
 
-4. **Template text in responses**: The rendered prompt (including the template structure) is returned to nodes. This is by design — nodes need the full prompt to send to their LLM. The mitigation is rate limiting and key-based access control.
+### Resolved Limitations
+
+- ~~**Static API keys**~~: Resolved by the node registry (Issue #428). Nodes now receive dynamically generated API keys on registration, with key rotation available via `/admin/nodes/:id/rotate-key`. Environment variable keys remain as a fast-path fallback.
 
 ## Contact
 

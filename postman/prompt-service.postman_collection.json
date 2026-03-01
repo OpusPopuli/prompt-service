@@ -1,0 +1,741 @@
+{
+  "info": {
+    "name": "Opus Populi - Prompt Service",
+    "description": "API collection for the Opus Populi private AI prompt service.\n\n## Authentication\n- **Node endpoints** (`/prompts/*`): Use `{{apiKey}}` (format: `region:key`)\n- **Admin endpoints** (`/admin/*`): Use `{{adminKey}}`\n\n## Setup\n1. Import this collection\n2. Import the environment file (`prompt-service.postman_environment.json`)\n3. Start the service: `docker compose up -d`\n4. Run the Health Check request first to verify connectivity",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3100" },
+    { "key": "apiKey", "value": "dev-key-1" },
+    { "key": "adminKey", "value": "admin-dev-key-1" },
+    { "key": "templateId", "value": "" },
+    { "key": "experimentId", "value": "" },
+    { "key": "nodeId", "value": "" },
+    { "key": "versionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Database connected', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.database).to.eql('connected');",
+                  "  pm.expect(body.activeTemplates).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prompts",
+      "description": "Node-facing endpoints for fetching rendered prompts. Require API key auth.",
+      "item": [
+        {
+          "name": "Structural Analysis",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "  pm.expect(body).to.have.property('expiresAt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataType\": \"propositions\",\n  \"contentGoal\": \"Extract ballot measure details including title, summary, and fiscal impact\",\n  \"category\": \"political\",\n  \"hints\": [\"Look for 'Proposition' in headings\", \"Check for fiscal impact sections\"],\n  \"html\": \"<html><body><h1>Proposition 1</h1><p>This measure would authorize bonds...</p></body></html>\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/structural-analysis", "host": ["{{baseUrl}}"], "path": ["prompts", "structural-analysis"] }
+          }
+        },
+        {
+          "name": "Document Analysis",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "  pm.expect(body).to.have.property('expiresAt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"petition\",\n  \"text\": \"We, the undersigned residents of California, hereby petition the state legislature to allocate additional funding for public transit infrastructure improvements in the greater Los Angeles metropolitan area.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/document-analysis", "host": ["{{baseUrl}}"], "path": ["prompts", "document-analysis"] }
+          }
+        },
+        {
+          "name": "RAG",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "  pm.expect(body).to.have.property('expiresAt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"context\": \"Proposition 36 amends the California Constitution to increase penalties for certain drug and theft crimes. It reclassifies some misdemeanor drug and theft offenses as felonies. The measure was approved by voters in November 2024.\",\n  \"query\": \"What does Proposition 36 change about drug crime penalties?\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/rag", "host": ["{{baseUrl}}"], "path": ["prompts", "rag"] }
+          }
+        },
+        {
+          "name": "Verify Prompt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has valid field', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('valid');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"promptHash\": \"abc123def456\",\n  \"promptVersion\": \"v1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/prompts/verify", "host": ["{{baseUrl}}"], "path": ["prompts", "verify"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Templates",
+      "description": "Admin endpoints for managing prompt templates. Require admin API key.",
+      "item": [
+        {
+          "name": "List Templates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "templates"],
+              "query": [
+                { "key": "category", "value": "document_analysis", "disabled": true },
+                { "key": "isActive", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Template by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has version history', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('versionHistory');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["admin", "templates", "{{templateId}}"] }
+          }
+        },
+        {
+          "name": "Create Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Template created', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.collectionVariables.set('templateId', body.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"test-template\",\n  \"category\": \"document_analysis\",\n  \"description\": \"A test template for Postman validation\",\n  \"templateText\": \"Analyze the following {{DOCUMENT_TYPE}} document:\\n\\n{{TEXT}}\\n\\nProvide a structured analysis.\",\n  \"variables\": [\"DOCUMENT_TYPE\", \"TEXT\"],\n  \"changeNote\": \"Initial creation via Postman\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/templates", "host": ["{{baseUrl}}"], "path": ["admin", "templates"] }
+          }
+        },
+        {
+          "name": "Update Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Version incremented', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.version).to.be.above(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateText\": \"Analyze the following {{DOCUMENT_TYPE}} document with enhanced extraction rules:\\n\\n{{TEXT}}\\n\\nProvide a structured analysis with key points, entities, and sentiment.\",\n  \"changeNote\": \"Enhanced extraction rules\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["admin", "templates", "{{templateId}}"] }
+          }
+        },
+        {
+          "name": "Rollback Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetVersion\": 1,\n  \"changeNote\": \"Rolling back to v1 due to regression\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/templates/{{templateId}}/rollback", "host": ["{{baseUrl}}"], "path": ["admin", "templates", "{{templateId}}", "rollback"] }
+          }
+        },
+        {
+          "name": "Delete Template (Soft)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["admin", "templates", "{{templateId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Experiments",
+      "description": "A/B testing experiment lifecycle management. Require admin API key.",
+      "item": [
+        {
+          "name": "Create Experiment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Experiment created in draft', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body.status).to.eql('draft');",
+                  "  pm.collectionVariables.set('experimentId', body.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"test-experiment\",\n  \"description\": \"Testing improved extraction rules\",\n  \"templateId\": \"{{templateId}}\",\n  \"variants\": [\n    {\n      \"name\": \"control\",\n      \"versionId\": \"{{versionId}}\",\n      \"trafficPct\": 50\n    },\n    {\n      \"name\": \"variant_a\",\n      \"versionId\": \"{{versionId}}\",\n      \"trafficPct\": 50\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/experiments", "host": ["{{baseUrl}}"], "path": ["admin", "experiments"] }
+          }
+        },
+        {
+          "name": "List Experiments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/experiments", "host": ["{{baseUrl}}"], "path": ["admin", "experiments"] }
+          }
+        },
+        {
+          "name": "Get Experiment by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has variants', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('variants');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/experiments/{{experimentId}}", "host": ["{{baseUrl}}"], "path": ["admin", "experiments", "{{experimentId}}"] }
+          }
+        },
+        {
+          "name": "Activate Experiment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is active', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('active');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/experiments/{{experimentId}}/activate", "host": ["{{baseUrl}}"], "path": ["admin", "experiments", "{{experimentId}}", "activate"] }
+          }
+        },
+        {
+          "name": "Stop Experiment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is stopped', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('stopped');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/experiments/{{experimentId}}/stop", "host": ["{{baseUrl}}"], "path": ["admin", "experiments", "{{experimentId}}", "stop"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Node Registry",
+      "description": "Node registration, certification lifecycle, and health monitoring. Require admin API key.",
+      "item": [
+        {
+          "name": "Register Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Node created with API key', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body).to.have.property('apiKey');",
+                  "  pm.collectionVariables.set('nodeId', body.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"node-ca-01\",\n  \"region\": \"ca\",\n  \"publicKey\": \"optional-public-key-for-signature-verification\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/nodes", "host": ["{{baseUrl}}"], "path": ["admin", "nodes"] }
+          }
+        },
+        {
+          "name": "List Nodes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/nodes",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "nodes"],
+              "query": [
+                { "key": "region", "value": "ca", "disabled": true },
+                { "key": "status", "value": "certified", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Node Health Dashboard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has dashboard metrics', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/nodes/health", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "health"] }
+          }
+        },
+        {
+          "name": "Get Node by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has audit logs', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('auditLogs');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}"] }
+          }
+        },
+        {
+          "name": "Update Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publicKey\": \"updated-public-key\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}"] }
+          }
+        },
+        {
+          "name": "Certify Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Node certified', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('certified');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expiresInDays\": 365,\n  \"reason\": \"Initial certification after security review\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}/certify", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}", "certify"] }
+          }
+        },
+        {
+          "name": "Decertify Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Node decertified', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('decertified');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Security policy violation detected\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}/decertify", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}", "decertify"] }
+          }
+        },
+        {
+          "name": "Re-certify Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Node recertified', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('certified');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expiresInDays\": 365,\n  \"reason\": \"Annual recertification completed\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}/recertify", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}", "recertify"] }
+          }
+        },
+        {
+          "name": "Rotate Node API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('New API key returned', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('apiKey');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}/rotate-key", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}", "rotate-key"] }
+          }
+        },
+        {
+          "name": "Delete Node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/nodes/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["admin", "nodes", "{{nodeId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

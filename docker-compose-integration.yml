@@ -1,6 +1,6 @@
 services:
   prompt-db-test:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: prompt_service_test
       POSTGRES_USER: postgres
@@ -13,7 +13,7 @@ services:
       timeout: 5s
       retries: 5
 
-  prompt-service:
+  opuspopuli-prompts:
     build: .
     ports:
       - '3101:3100'
@@ -38,13 +38,13 @@ services:
       context: .
       dockerfile: Dockerfile.test-runner
     environment:
-      PROMPT_SERVICE_URL: http://prompt-service:3100
+      PROMPT_SERVICE_URL: http://opuspopuli-prompts:3100
       DATABASE_URL: postgresql://postgres:postgres@prompt-db-test:5432/prompt_service_test?schema=public
       API_KEY: test-api-key-1
       API_KEY_2: test-api-key-2
       ADMIN_API_KEY: admin-test-key-1
     depends_on:
-      prompt-service:
+      opuspopuli-prompts:
         condition: service_healthy
     profiles:
       - test

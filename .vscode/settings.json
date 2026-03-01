@@ -1,0 +1,6 @@
+{
+  "sonarlint.connectedMode.project": {
+    "connectionId": "opuspopuli",
+    "projectKey": "OpusPopuli_prompt-service"
+  }
+}
