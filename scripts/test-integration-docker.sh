@@ -26,13 +26,13 @@ docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" up -d
 
 echo -e "${YELLOW}Waiting for PostgreSQL...${NC}"
 for i in $(seq 1 30); do
-  if docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec -T prompt-db-test pg_isready -U postgres >/dev/null 2>&1; then
+  if docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec -T opuspopuli-prompts-db-test pg_isready -U postgres >/dev/null 2>&1; then
     echo -e "${GREEN}PostgreSQL is ready${NC}"
     break
   fi
   if [[ "$i" -eq 30 ]]; then
     echo -e "${RED}PostgreSQL failed to start${NC}"
-    docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs prompt-db-test
+    docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs opuspopuli-prompts-db-test
     exit 1
   fi
   sleep 2

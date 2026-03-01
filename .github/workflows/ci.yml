@@ -175,7 +175,7 @@ jobs:
 
       - name: Show service logs on failure
         if: failure()
-        run: docker compose -f docker-compose-integration.yml logs prompt-service prompt-db-test
+        run: docker compose -f docker-compose-integration.yml logs opuspopuli-prompts opuspopuli-prompts-db-test
 
       - name: Cleanup
         if: always()
