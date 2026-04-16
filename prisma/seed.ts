@@ -58,14 +58,15 @@ Respond with ONLY valid JSON matching this exact structure (no markdown, no expl
   "fieldMappings": [
     {
       "fieldName": "the target field name",
-      "selector": "CSS selector relative to the item",
+      "selector": "CSS selector relative to the item (or container if scope is 'container')",
       "extractionMethod": "text|attribute|html|regex",
       "attribute": "only if extractionMethod is 'attribute'",
       "regexPattern": "only if extractionMethod is 'regex'",
       "regexGroup": 1,
       "transform": { "type": "transform_type", "params": {} },
       "required": true,
-      "defaultValue": "fallback if empty"
+      "defaultValue": "fallback if empty",
+      "scope": "item|container (default: item — use 'container' when the data is in a sibling/parent of items, not inside each item)"
     }
   ],
   "pagination": { "type": "none", "maxPages": 1 },
@@ -82,6 +83,7 @@ Respond with ONLY valid JSON matching this exact structure (no markdown, no expl
 6. If the page has multiple formats (e.g., table AND heading-based), choose the PRIMARY format
 7. The containerSelector should match exactly ONE element
 8. The itemSelector should match MULTIPLE elements within the container
+9. Use "scope": "container" when a field's data lives OUTSIDE the item elements (e.g., a heading above the items that applies to all of them). The selector is then relative to the container, not the item.
 
 ## HTML to Analyze
 \`\`\`html
