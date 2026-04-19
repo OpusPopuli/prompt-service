@@ -24,13 +24,13 @@ services:
     image: opuspopuli-prompts
     container_name: opuspopuli-prompts
     ports:
-      - '3200:3200'
+      - '3210:3210'
     environment:
       DATABASE_URL: postgresql://postgres:postgres@opuspopuli-prompts-db:5432/prompt_service?schema=public
       API_KEYS: dev-key-1,dev-key-2
       ADMIN_API_KEYS: admin-dev-key-1
       PROMPT_TTL_SECONDS: 3600
-      PORT: 3200
+      PORT: 3210
     depends_on:
       opuspopuli-prompts-db:
         condition: service_healthy
