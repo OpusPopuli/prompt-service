@@ -269,6 +269,50 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getPromptHash', () => {
+    it('returns SHA-256 hash + version of the active template', async () => {
+      const templateText = 'bare template text';
+      const expectedHash = createHash('sha256')
+        .update(templateText)
+        .digest('hex');
+
+      prisma.promptTemplate.findFirst.mockResolvedValue({
+        id: '1',
+        name: 'structural-analysis',
+        templateText,
+        version: 3,
+        isActive: true,
+      });
+
+      const result = await service.getPromptHash('structural-analysis');
+
+      expect(result).toEqual({
+        name: 'structural-analysis',
+        promptHash: expectedHash,
+        promptVersion: 'v3',
+      });
+    });
+
+    it('throws NotFoundException when template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(service.getPromptHash('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('ignores inactive templates', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(service.getPromptHash('inactive')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.promptTemplate.findFirst).toHaveBeenCalledWith({
+        where: { name: 'inactive', isActive: true },
+      });
+    });
+  });
+
   describe('verifyPrompt', () => {
     it('should return valid for matching hash', async () => {
       const templateText = 'test template';

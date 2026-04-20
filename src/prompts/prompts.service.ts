@@ -19,6 +19,12 @@ export interface VerifyResult {
   templateName?: string;
 }
 
+export interface PromptHashResult {
+  name: string;
+  promptHash: string;
+  promptVersion: string;
+}
+
 interface ResolvedTemplate {
   templateText: string;
   version: number;
@@ -141,6 +147,27 @@ export class PromptsService {
     );
 
     return response;
+  }
+
+  /**
+   * Return the current hash + version of a named template, no interpolation.
+   * Used by clients to check whether their cached prompt is stale without
+   * paying the cost of fetching the full rendered prompt.
+   */
+  async getPromptHash(name: string): Promise<PromptHashResult> {
+    const template = await this.prisma.promptTemplate.findFirst({
+      where: { name, isActive: true },
+    });
+
+    if (!template) {
+      throw new NotFoundException(`Prompt template "${name}" not found`);
+    }
+
+    return {
+      name: template.name,
+      promptHash: this.hash(template.templateText),
+      promptVersion: `v${template.version}`,
+    };
   }
 
   async verifyPrompt(
