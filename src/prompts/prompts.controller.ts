@@ -1,4 +1,12 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -91,5 +99,26 @@ export class PromptsController {
   @ApiResponse({ status: 401, description: 'Invalid API key' })
   async verify(@Body() dto: VerifyPromptDto) {
     return this.promptsService.verifyPrompt(dto.promptHash, dto.promptVersion);
+  }
+
+  /**
+   * Return the current hash + version of a named template, with no
+   * interpolation. Used by clients to cheaply check whether a cached prompt
+   * is stale (SHA-256 of the bare template text). Authoritative source of
+   * truth for manifest cache invalidation.
+   */
+  @Get(':name/hash')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @ApiOperation({ summary: 'Get the hash of a named prompt template' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current hash + version of the template',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  async hash(@Param('name') name: string) {
+    return this.promptsService.getPromptHash(name);
   }
 }

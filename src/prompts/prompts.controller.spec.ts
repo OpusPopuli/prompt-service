@@ -20,6 +20,7 @@ describe('PromptsController', () => {
             getDocumentAnalysisPrompt: jest.fn(),
             getRagPrompt: jest.fn(),
             verifyPrompt: jest.fn(),
+            getPromptHash: jest.fn(),
           },
         },
         {
@@ -126,6 +127,21 @@ describe('PromptsController', () => {
     const result = await controller.verify(dto);
 
     expect(service.verifyPrompt).toHaveBeenCalledWith('hash123', 'v1');
+    expect(result).toEqual(expected);
+  });
+
+  it('should call getPromptHash with the name param', async () => {
+    const expected = {
+      name: 'structural-analysis',
+      promptHash: 'abc',
+      promptVersion: 'v1',
+    };
+
+    jest.spyOn(service, 'getPromptHash').mockResolvedValue(expected);
+
+    const result = await controller.hash('structural-analysis');
+
+    expect(service.getPromptHash).toHaveBeenCalledWith('structural-analysis');
     expect(result).toEqual(expected);
   });
 });
