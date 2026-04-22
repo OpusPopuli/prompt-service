@@ -171,6 +171,37 @@
             },
             "url": { "raw": "{{baseUrl}}/prompts/verify", "host": ["{{baseUrl}}"], "path": ["prompts", "verify"] }
           }
+        },
+        {
+          "name": "Get Prompt Hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has name, promptHash, promptVersion', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('name');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/prompts/structural-analysis/hash",
+              "host": ["{{baseUrl}}"],
+              "path": ["prompts", "structural-analysis", "hash"]
+            },
+            "description": "Returns the current SHA-256 hash and version of a named template with no interpolation. Used by clients to cheaply check whether a cached prompt is stale without fetching the full rendered prompt. Authoritative source of truth for manifest cache invalidation."
+          }
         }
       ]
     },

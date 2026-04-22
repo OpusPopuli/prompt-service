@@ -37,6 +37,19 @@ interface ResolvedTemplate {
 export class PromptsService {
   private readonly logger = new Logger(PromptsService.name);
 
+  /**
+   * Running count of audit-log write failures. Exposed to let ops
+   * dashboards (and `/health`) notice when the audit trail is dropping
+   * without needing a full Prometheus integration — that's tracked in
+   * #27 as a separate follow-up. See #25.
+   */
+  private auditLogFailureCount = 0;
+
+  /** Total audit-log write failures since process start. */
+  getAuditLogFailureCount(): number {
+    return this.auditLogFailureCount;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -284,7 +297,23 @@ export class PromptsService {
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to log prompt request: ${err}`);
+      // Upgrade from warn → error so log-based alerting catches this.
+      // Audit logs are compliance-critical for a nonpartisan civic
+      // platform; silently losing them is NOT acceptable. We don't
+      // block the prompt response (audit is downstream of serving),
+      // but we surface the failure loudly. See #25.
+      this.auditLogFailureCount += 1;
+      this.logger.error(
+        {
+          event: 'audit_log_write_failure',
+          endpoint,
+          region,
+          apiKeyPrefix: apiKey.slice(0, 8) + '...',
+          cumulativeFailures: this.auditLogFailureCount,
+          error: (err as Error).message,
+        },
+        `Failed to write prompt request audit log (failures so far: ${this.auditLogFailureCount})`,
+      );
     }
   }
 }
