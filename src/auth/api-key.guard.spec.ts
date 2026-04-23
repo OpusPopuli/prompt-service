@@ -324,6 +324,10 @@ describe('ApiKeyGuard', () => {
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(request.region).toBe('ca');
       expect(request.nodeId).toBe(nodeId);
+      // Downstream audit logging expects req.apiKey to be populated in
+      // both auth paths — without this, apiKey.slice(...) throws on the
+      // HMAC path and surfaces as a 500.
+      expect(request.apiKey).toBe(apiKey);
     });
 
     it('should reject expired timestamp (past)', async () => {
