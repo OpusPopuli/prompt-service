@@ -100,6 +100,47 @@ describe('VaultService', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('should escape SQL LIKE wildcards in the prefix', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await service.getSecretsByPrefix('weird_%_\\prefix');
+
+      // The template-tag values array is passed as the second arg to the
+      // tagged template function; we assert the pattern value, not the SQL.
+      const call = prisma.$queryRaw.mock.calls[0];
+      const values = call.slice(1);
+      expect(values).toContain('weird\\_\\%\\_\\\\prefix%');
+    });
+  });
+
+  describe('onApplicationBootstrap', () => {
+    const originalEnv = process.env.NODE_ENV;
+    afterEach(() => {
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should resolve silently when Vault is reachable', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+
+      await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    });
+
+    it('should throw in production when Vault is unreachable', async () => {
+      process.env.NODE_ENV = 'production';
+      prisma.$queryRaw.mockRejectedValue(new Error('vault offline'));
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        'vault offline',
+      );
+    });
+
+    it('should warn but continue in dev when Vault is unreachable', async () => {
+      process.env.NODE_ENV = 'development';
+      prisma.$queryRaw.mockRejectedValue(new Error('vault offline'));
+
+      await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    });
   });
 
   describe('updateSecret', () => {
