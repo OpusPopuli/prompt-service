@@ -182,6 +182,11 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
       throw new UnauthorizedException('Invalid HMAC signature');
     }
 
+    // Propagate the authenticated secret so downstream audit logging
+    // (apiKeyPrefix) can record which key served the request, matching
+    // the Bearer path's behavior. Without this, audit-log writes throw
+    // on `undefined.slice` for HMAC-signed requests.
+    request.apiKey = apiKey;
     request.region = node.region;
     request.nodeId = node.id;
     return true;

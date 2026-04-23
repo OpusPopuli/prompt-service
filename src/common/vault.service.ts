@@ -84,9 +84,9 @@ export class VaultService implements OnApplicationBootstrap {
    */
   private escapeLikePattern(input: string): string {
     return input
-      .replace(/\\/g, '\\\\')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
+      .replaceAll('\\', String.raw`\\`)
+      .replaceAll('%', String.raw`\%`)
+      .replaceAll('_', String.raw`\_`);
   }
 
   async getSecretsByPrefix(
