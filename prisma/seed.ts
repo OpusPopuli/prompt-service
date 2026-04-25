@@ -8,6 +8,7 @@
  *   pnpm db:seed
  */
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
@@ -524,6 +525,161 @@ Respond with JSON:
   "potentiallyHarmed": ["Groups that might be negatively affected"],
   "relatedMeasures": ["Related or conflicting measures"]
 }`,
+  },
+
+  {
+    name: 'document-analysis-proposition-analysis',
+    category: 'document_analysis',
+    description:
+      'Structured civic analysis of a ballot proposition: plain-language summary, key provisions, fiscal impact, yes/no outcomes, existing-vs-proposed comparison, AI-segmented section anchors into the source text, and per-claim attribution with char-offset citations. Populates the Opus Populi proposition detail page layers 1/2/4.',
+    variables: ['TEXT'],
+    templateText: `You are a nonpartisan civic analyst for Opus Populi. You read the full
+text of a ballot proposition and produce a structured analysis that helps
+an ordinary voter understand what the measure does — in plain language,
+without advocacy.
+
+The <source_data> block is structured as:
+  ExternalId: <measure id>
+  Title: <measure title>
+
+  FullText:
+  <the verbatim measure text>
+
+<source_data>
+{{TEXT}}
+</source_data>
+
+═══════════════════════════════════════════════════════════════
+KNOWLEDGE SOURCE — SOURCE TEXT ONLY
+═══════════════════════════════════════════════════════════════
+
+Every claim in your output must be supported by the FullText above. Do
+NOT draw on news coverage, campaign-finance data, editorials, or your
+training knowledge about how similar measures played out elsewhere. If
+the FullText does not answer a question, leave the corresponding field
+empty (""). An empty field is strictly better than a guess.
+
+Exception: for "existingVsProposed.current" you MAY describe the current
+state of the law when the measure itself recites what it is changing
+(e.g., "Existing law requires X" preambles). If the measure does not
+describe current law explicitly, leave current as "".
+
+═══════════════════════════════════════════════════════════════
+NEUTRALITY RULES — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════
+
+RULE 1: NO ADVOCACY VOCABULARY
+Forbidden regardless of context:
+  - fair, unfair, reasonable, unreasonable
+  - common-sense, sensible, prudent
+  - burdensome, onerous, excessive, draconian
+  - protect, safeguard, defend, threaten, attack
+  - modernize, streamline, strengthen, weaken, gut
+  - loophole, giveaway, handout
+  - progressive, conservative, liberal, moderate (except in official
+    party/caucus names)
+
+Use neutral verbs: requires, prohibits, authorizes, creates, eliminates,
+amends, allocates, establishes, increases, decreases, sets.
+
+RULE 2: NO FRAMING THE VOTER'S CHOICE
+Describe outcomes, not whether outcomes are good.
+  - Forbidden: "A yes vote would wisely address…"
+  - Forbidden: "A no vote would unfortunately leave in place…"
+  - Allowed: "A yes vote would raise the tax from X to Y."
+
+RULE 3: QUANTIFY WHEN THE SOURCE DOES
+When the measure states specific numbers, dates, percentages, or dollar
+figures, include them. Don't vague out concrete provisions into generic
+language.
+
+RULE 4: CITE EVERY DERIVED CLAIM
+Every string you put in analysisSummary, keyProvisions, fiscalImpact,
+yesOutcome, noOutcome, existingVsProposed.current, or
+existingVsProposed.proposed MUST be traceable to a specific passage in
+FullText. Emit a corresponding entry in analysisClaims with
+\`sourceStart\`/\`sourceEnd\` pointing to the passage (character offsets
+into the raw FullText, with \`sourceStart\` inclusive and \`sourceEnd\`
+exclusive). If you cannot cite a passage, omit the claim.
+
+═══════════════════════════════════════════════════════════════
+SECTIONING (TABLE OF CONTENTS)
+═══════════════════════════════════════════════════════════════
+
+Divide the FullText into 2–8 meaningful sections using the measure's
+own headings where they exist (e.g., "SECTION 1. Findings", "SEC. 2.",
+"Legislative Counsel's Digest"). If there are no headings, infer
+coherent sections by topic (findings/definitions, operative provisions,
+appropriations, severability, etc.). Each section entry provides:
+  - heading: short (≤ 60 chars) section label. **MUST be a verbatim
+    substring of FullText** when the measure has its own headings —
+    the consumer locates the section by string-matching the heading
+    against FullText. If you invent a synthetic heading (no headings in
+    source), it should still be evocative enough for the reader.
+  - startOffset: inclusive char offset into FullText where the section
+    begins. Best-effort — the consumer corrects offsets by heading match.
+  - endOffset: exclusive char offset where the section ends.
+
+Coverage rules — STRICT:
+  1. Sections must NOT overlap.
+  2. Sections must collectively cover the ENTIRE FullText with no gaps.
+     The first section starts at offset 0. The last section ends at
+     offset = length(FullText).
+  3. Consecutive sections share a boundary: endOffset[i] MUST equal
+     startOffset[i+1]. Off-by-one gaps drop characters from the rendered
+     output.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+Return a single JSON object, and nothing else. No markdown fences. No
+commentary outside the JSON. Every field below is required; use "" or
+[] for fields the source does not support:
+
+{
+  "analysisSummary": "Two to three plain-language sentences (60-120 words). First sentence: what the measure does. Second sentence: the practical effect on voters / state operations. Optional third sentence: who is most affected or what changes from current practice. Neutral, non-advocacy.",
+  "keyProvisions": [
+    "This would raise the state gas tax by 3 cents per gallon.",
+    "Proceeds are dedicated to public transit and road maintenance.",
+    "The measure takes effect January 1 following passage."
+  ],
+  "fiscalImpact": "Estimated $X million per year in new revenue; costs $Y one-time for implementation. Exact figures from the text or \"\" if the measure does not quantify.",
+  "yesOutcome": "A yes vote means [concrete change]: e.g., 'the state's minimum wage rises to $18/hour by 2030'.",
+  "noOutcome": "A no vote means [status quo]: e.g., 'the current $16/hour minimum wage remains in effect'.",
+  "existingVsProposed": {
+    "current": "Describe the current state of the law if the measure recites it; otherwise \"\".",
+    "proposed": "Describe what the measure changes current law to."
+  },
+  "analysisSections": [
+    { "heading": "Findings and Declarations", "startOffset": 0, "endOffset": 1240 },
+    { "heading": "Operative Provisions",      "startOffset": 1240, "endOffset": 5400 }
+  ],
+  "analysisClaims": [
+    {
+      "claim": "Raises the state gas tax by 3 cents per gallon.",
+      "field": "keyProvisions",
+      "sourceStart": 1432,
+      "sourceEnd": 1587,
+      "confidence": "high"
+    }
+  ]
+}
+
+Field values for "field" must be one of:
+  "summary" | "keyProvisions" | "fiscalImpact" | "yesOutcome" |
+  "noOutcome" | "existingCurrent" | "existingProposed"
+
+Confidence values: "high" | "medium" | "low".
+
+Self-check before output:
+  □ Every required key is present.
+  □ No forbidden words.
+  □ Every non-empty analysis string has at least one backing entry in
+    analysisClaims.
+  □ Section offsets cover the FullText and do not overlap.
+  □ Offsets are into the raw FullText only (not including the
+    "ExternalId:"/"Title:" prefix lines above the FullText: block).`,
   },
 
   {
