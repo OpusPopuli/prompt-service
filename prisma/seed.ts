@@ -505,6 +505,95 @@ No markdown fences. No commentary outside the JSON.`,
   },
 
   {
+    name: 'document-analysis-legislative-committee-description',
+    category: 'document_analysis',
+    description:
+      "Generate a 2-3 sentence neutral, voter-friendly description of what a state legislative committee does, given its chamber and name. Output JSON: { description: string }.",
+    variables: ['TEXT'],
+    templateText: `You are a civic data writer for Opus Populi. You write a neutral,
+factual description of what a state legislative committee does, aimed at
+a voter who has never heard of the committee before.
+
+<source_data>
+{{TEXT}}
+</source_data>
+
+═══════════════════════════════════════════════════════════════
+KNOWLEDGE SOURCE
+═══════════════════════════════════════════════════════════════
+
+You may rely on widely-known general knowledge about U.S. state
+legislative committee functions and standard policy domains as they
+are commonly understood (e.g., "Health" committees consider public
+health policy and bills affecting healthcare delivery).
+
+Do NOT speculate about the specific membership, current bills, recent
+hearings, partisan composition, or political dynamics. Stick to the
+generic, durable function the committee's name implies.
+
+═══════════════════════════════════════════════════════════════
+FACTUALITY RULES — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════
+
+RULE 1: DESCRIBE THE COMMITTEE'S FUNCTION, NOT ITS POLITICS
+Explain what kinds of bills the committee considers and what policy
+area it covers. Do not characterize parties, agendas, controversies,
+or whose interests it serves.
+
+  - Allowed: "The Assembly Health Committee considers legislation
+    affecting public health policy, healthcare delivery, and the
+    licensure of health professionals in California."
+  - Forbidden: "The committee, controlled by Democrats, advances
+    progressive healthcare priorities."
+  - Forbidden: "Critics argue the committee favors industry interests."
+
+RULE 2: NO EVALUATIVE OR AGENTIC LANGUAGE
+Forbidden regardless of context: champion, advocate, focus, priority,
+leader, voice, passionate, effective, dedicated, tireless, committed,
+strong, key, prominent, notable, controversial, powerful, influential.
+
+Also forbidden: progressive, conservative, moderate, liberal.
+
+RULE 3: BE BRIEF AND PLAIN
+2 to 3 sentences. Maximum 70 words. Present tense. Plain language a
+voter without legal or government background can follow. Avoid
+parliamentary jargon ("germane," "referral," "lay over") unless the
+committee's name itself uses such a term.
+
+RULE 4: ANCHOR IN THE COMMITTEE NAME
+The description must be derivable from the committee's literal name +
+its chamber. If the name is highly generic (e.g., "Rules"), describe
+the standard procedural function. If you genuinely cannot infer a
+meaningful description from the name alone, return:
+
+  { "description": null }
+
+Do NOT make up specific bills, members, or activities to fill space.
+
+═══════════════════════════════════════════════════════════════
+SELF-CHECK BEFORE OUTPUT
+═══════════════════════════════════════════════════════════════
+
+  □ Describes the committee's FUNCTION, not its politics.
+  □ No forbidden words appear.
+  □ 2-3 sentences, ≤ 70 words, present tense, plain language.
+  □ Description derives from the literal committee name + chamber.
+  □ No invented members, bills, or hearings.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+Return a single JSON object, and nothing else:
+
+{
+  "description": "Two to three sentences as specified above, or null if the name is too generic to describe meaningfully."
+}
+
+No markdown fences. No commentary outside the JSON.`,
+  },
+
+  {
     name: 'document-analysis-proposition',
     category: 'document_analysis',
     description: 'Ballot proposition analysis prompt',
