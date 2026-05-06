@@ -20,6 +20,7 @@ import { StructuralAnalysisDto } from './dto/structural-analysis.dto';
 import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
 import { VerifyPromptDto } from './dto/verify-prompt.dto';
+import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 
 @ApiTags('prompts')
 @Controller('prompts')
@@ -89,6 +90,32 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getRagPrompt(dto, req.apiKey, req.region);
+  }
+
+  @Post('civics-extraction')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @ApiOperation({
+    summary:
+      'Get civics-extraction prompt. The LLM is instructed to emit a CivicsBlock with verbatim source text + plain-language rewrites for laypeople. See OpusPopuli/opuspopuli#669.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Prompt template rendered with variables',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  async civicsExtraction(
+    @Body() dto: CivicsExtractionDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getCivicsExtractionPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
   }
 
   @Post('verify')

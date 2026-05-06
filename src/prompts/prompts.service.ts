@@ -6,6 +6,7 @@ import { ExperimentsService } from '../experiments/experiments.service';
 import { StructuralAnalysisDto } from './dto/structural-analysis.dto';
 import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
+import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 
 export interface PromptServiceResponse {
   promptText: string;
@@ -125,6 +126,50 @@ export class PromptsService {
 
     await this.logRequest(
       'document-analysis',
+      template.version,
+      apiKey,
+      region,
+      template.experimentId,
+      template.variantName,
+    );
+
+    return response;
+  }
+
+  /**
+   * Compose a civics-extraction prompt. The LLM is instructed to
+   * emit JSON matching `@opuspopuli/common`'s `CivicsBlock` shape,
+   * where every text field carries BOTH a verbatim source quote AND
+   * a plain-language rewrite for laypeople. See
+   * OpusPopuli/opuspopuli#669 + OpusPopuli/opuspopuli-regions#15.
+   */
+  async getCivicsExtractionPrompt(
+    dto: CivicsExtractionDto,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptServiceResponse> {
+    const template = await this.resolveTemplate('civics-extraction', apiKey);
+
+    const hintsSection = dto.hints?.length
+      ? '## Hints from the region author\n' +
+        dto.hints.map((h) => '- ' + h).join('\n') +
+        '\n'
+      : '';
+
+    const promptText = this.interpolate(template.templateText, {
+      REGION_ID: dto.regionId,
+      SOURCE_URL: dto.sourceUrl,
+      CONTENT_GOAL: dto.contentGoal,
+      CATEGORY: dto.category ?? '',
+      HINTS: hintsSection,
+      HTML: dto.html,
+    });
+
+    const response = this.buildResponse(template);
+    response.promptText = promptText;
+
+    await this.logRequest(
+      'civics-extraction',
       template.version,
       apiKey,
       region,

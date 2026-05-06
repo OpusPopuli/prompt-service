@@ -144,6 +144,39 @@
           }
         },
         {
+          "name": "Civics Extraction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has required fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('promptText');",
+                  "  pm.expect(body).to.have.property('promptHash');",
+                  "  pm.expect(body).to.have.property('promptVersion');",
+                  "  pm.expect(body).to.have.property('expiresAt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"regionId\": \"california\",\n  \"sourceUrl\": \"https://www.assembly.ca.gov/resources/glossary\",\n  \"contentGoal\": \"Extract the official California Assembly glossary: every defined term with its verbatim institutional definition. The prompt-service generates a plain-language rewrite per term for laypeople, but the verbatim Assembly definition is mandatory and must be preserved untouched.\",\n  \"category\": \"Assembly\",\n  \"hints\": [\n    \"Approximately 150 terms organized A-Z plus an abbreviations section\",\n    \"Always emit BOTH `verbatim` (Assembly's exact text) AND `plainLanguage` (rewrite for a high-school-senior reading level) per term — never replace one with the other\"\n  ],\n  \"html\": \"<html><body><dl><dt>Engrossed Bill</dt><dd>Whenever a bill is amended, the printed form of the bill is proofread to make sure all amendments are inserted properly...</dd></dl></body></html>\"\n}"
+            },
+            "description": "Civics-extraction prompt — the LLM is instructed to emit a CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) where every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople. Requires a `civics-extraction` prompt template seeded in prompt_templates. See OpusPopuli/opuspopuli#669.",
+            "url": { "raw": "{{baseUrl}}/prompts/civics-extraction", "host": ["{{baseUrl}}"], "path": ["prompts", "civics-extraction"] }
+          }
+        },
+        {
           "name": "Verify Prompt",
           "event": [
             {
