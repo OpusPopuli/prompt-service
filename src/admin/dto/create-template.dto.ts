@@ -13,7 +13,12 @@ export class CreateTemplateDto {
 
   @ApiProperty({
     description: 'Template category',
-    enum: ['structural_analysis', 'document_analysis', 'rag'],
+    enum: [
+      'structural_analysis',
+      'document_analysis',
+      'rag',
+      'civics_extraction',
+    ],
   })
   @IsString()
   category: string;

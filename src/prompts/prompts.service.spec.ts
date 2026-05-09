@@ -275,7 +275,7 @@ describe('PromptsService', () => {
         id: '1',
         name: 'civics-extraction',
         templateText:
-          'Region: {{REGION_ID}}\nSource: {{SOURCE_URL}}\nGoal: {{CONTENT_GOAL}}\nCategory: {{CATEGORY}}\n{{HINTS}}HTML:\n{{HTML}}',
+          'Region: {{REGION_ID}}\nSource: {{SOURCE_URL}}\nGoal: {{CONTENT_GOAL}}\n{{CATEGORY}}{{HINTS}}HTML:\n{{HTML}}',
         version: 1,
         isActive: true,
       };

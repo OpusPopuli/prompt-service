@@ -160,7 +160,7 @@ export class PromptsService {
       REGION_ID: dto.regionId,
       SOURCE_URL: dto.sourceUrl,
       CONTENT_GOAL: dto.contentGoal,
-      CATEGORY: dto.category ?? '',
+      CATEGORY: dto.category ? `Category: ${dto.category}\n` : '',
       HINTS: hintsSection,
       HTML: dto.html,
     });

@@ -1,0 +1,49 @@
+#!/bin/sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# ── 1. Coverage gate ─────────────────────────────────────────────────────────
+echo "Running tests with coverage..."
+pnpm test:cov || exit 1
+
+# ── 2. AI review gate ────────────────────────────────────────────────────────
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" --no-use
+
+CLAUDE=$(command -v claude 2>/dev/null)
+if [ -z "$CLAUDE" ]; then
+  echo "Warning: claude CLI not found — skipping AI review."
+  exit 0
+fi
+
+echo ""
+echo "Running AI security review..."
+
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
+DIFF=$(git diff "$BASE"..HEAD 2>/dev/null | head -c 30000)
+
+if [ -z "$DIFF" ]; then
+  exit 0
+fi
+
+RESULT=$("$CLAUDE" --print "You are a pre-push security review gate for the Opus Populi prompt-service (private NestJS microservice serving AI prompt templates; HMAC-authenticated).
+
+Review the following git diff for BLOCKING issues only:
+1. Exposed secrets, API keys, or credentials committed in code
+2. Auth bypass — HMAC signature verification skipped, admin endpoints unguarded
+3. Prompt template text leaking through unauthenticated endpoints
+4. SQL/NoSQL injection, command injection
+5. Critical bugs that would corrupt prompt templates or break HMAC auth
+
+Respond with EXACTLY one of:
+  PASS
+  FAIL: <one sentence describing the blocking issue>
+
+Diff:
+$DIFF" 2>/dev/null)
+
+echo "$RESULT"
+
+if printf '%s' "$RESULT" | grep -q "^FAIL:"; then
+  printf '\nPush blocked by AI review. Fix the issue above or use git push --no-verify to override.\n'
+  exit 1
+fi
