@@ -6,7 +6,11 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 COPY prisma ./prisma/
-RUN pnpm install --frozen-lockfile || pnpm install
+# HUSKY=0 prevents the prepare script from running git-hook setup in Docker
+# (no .git dir in build context). pnpm@latest (v10+) requires explicit approval
+# for package build scripts; prisma's postinstall is handled by pnpm db:generate below.
+ENV HUSKY=0
+RUN pnpm install --frozen-lockfile --ignore-scripts || pnpm install --ignore-scripts
 RUN pnpm db:generate
 
 # Build
