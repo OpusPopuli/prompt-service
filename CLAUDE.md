@@ -17,6 +17,22 @@ pnpm db:migrate         # Run Prisma migrations (dev)
 pnpm db:studio          # Open Prisma Studio
 ```
 
+## Git workflow
+
+- **Base branch**: `develop`. All feature/fix branches cut from `develop`, PR back to `develop`.
+- **`main`** is production-only. Promote via a release PR (`develop → main`).
+- Never push directly to `develop` or `main`.
+- Branch naming: `feat/<short-description>`, `fix/<short-description>`, `chore/<short-description>`
+
+## Pre-push workflow (mandatory)
+
+Before running any `git push`, always:
+1. Run `/op-review` — fix any blocking findings before proceeding
+2. Run `/security-review` — fix any security issues before proceeding
+3. Only push after both pass cleanly
+
+The husky pre-push hook enforces coverage thresholds and an AI security gate automatically.
+
 ## Architecture
 
 ```
