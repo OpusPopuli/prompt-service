@@ -101,30 +101,6 @@ jobs:
           path: coverage/
           retention-days: 1
 
-  sonarcloud:
-    name: SonarCloud Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    needs: [test]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
-        with:
-          name: coverage-reports
-          path: coverage-reports
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
   build:
     name: Build
     runs-on: ubuntu-latest
