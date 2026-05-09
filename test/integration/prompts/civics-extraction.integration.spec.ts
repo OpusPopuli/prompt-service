@@ -25,7 +25,9 @@ describe('Civics Extraction Prompt (integration)', () => {
     expect(res.body.promptText).toContain(BASE_PAYLOAD.contentGoal);
     expect(res.body.promptText).toContain('Category: Assembly');
     expect(res.body.promptText).toContain('- ~150 terms organized A-Z');
-    expect(res.body.promptText).toContain('Engrossed: proofread after amendment.');
+    expect(res.body.promptText).toContain(
+      'Engrossed: proofread after amendment.',
+    );
     expect(res.body.promptHash).toMatch(/^[a-f0-9]{64}$/);
     expect(res.body.promptVersion).toMatch(/^v\d+$/);
     expect(res.body.expiresAt).toBeDefined();

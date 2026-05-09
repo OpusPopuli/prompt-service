@@ -431,7 +431,7 @@ JSON.`,
     name: 'document-analysis-representative-committees-summary',
     category: 'document_analysis',
     description:
-      'Generate a one-to-two-sentence neutral summary of a legislator\'s committee assignments, strictly describing policy areas (never characterizing interests or priorities)',
+      "Generate a one-to-two-sentence neutral summary of a legislator's committee assignments, strictly describing policy areas (never characterizing interests or priorities)",
     variables: ['TEXT'],
     templateText: `You are a civic data writer for Opus Populi. You write a neutral,
 factual preamble describing the policy areas a legislator's committee
@@ -512,7 +512,7 @@ No markdown fences. No commentary outside the JSON.`,
     name: 'document-analysis-legislative-committee-description',
     category: 'document_analysis',
     description:
-      "Generate a 2-3 sentence neutral, voter-friendly description of what a state legislative committee does, given its chamber and name. Output JSON: { description: string }.",
+      'Generate a 2-3 sentence neutral, voter-friendly description of what a state legislative committee does, given its chamber and name. Output JSON: { description: string }.',
     variables: ['TEXT'],
     templateText: `You are a civic data writer for Opus Populi. You write a neutral,
 factual description of what a state legislative committee does, aimed at
@@ -851,7 +851,7 @@ Answer:`,
     name: 'civics-extraction',
     category: 'civics_extraction',
     description:
-      'Extract a structured CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) from an official government page describing how a region\'s legislature works. Every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople.',
+      "Extract a structured CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) from an official government page describing how a region's legislature works. Every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople.",
     variables: [
       'REGION_ID',
       'SOURCE_URL',
@@ -1051,7 +1051,11 @@ function hash(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
-async function upsertVaultSecret(name: string, key: string, description: string) {
+async function upsertVaultSecret(
+  name: string,
+  key: string,
+  description: string,
+) {
   try {
     const existing = await prisma.$queryRaw<{ id: string }[]>`
       SELECT id::text FROM vault.decrypted_secrets WHERE name = ${name}
@@ -1079,18 +1083,32 @@ async function seedVaultKeys() {
   console.log('\nSeeding Vault keys...');
 
   const apiKeys = process.env.API_KEYS ?? '';
-  const regionEntries = apiKeys.split(',').map((e) => e.trim()).filter(Boolean);
+  const regionEntries = apiKeys
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
 
   for (const entry of regionEntries) {
     const { region, key } = parseRegionEntry(entry);
-    await upsertVaultSecret(`region_key_${region}`, key, `Region API key for ${region}`);
+    await upsertVaultSecret(
+      `region_key_${region}`,
+      key,
+      `Region API key for ${region}`,
+    );
   }
 
   const adminKeys = process.env.ADMIN_API_KEYS ?? '';
-  const adminEntries = adminKeys.split(',').map((k) => k.trim()).filter(Boolean);
+  const adminEntries = adminKeys
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
 
   for (let i = 0; i < adminEntries.length; i++) {
-    await upsertVaultSecret(`admin_key_${i + 1}`, adminEntries[i], `Admin API key ${i + 1}`);
+    await upsertVaultSecret(
+      `admin_key_${i + 1}`,
+      adminEntries[i],
+      `Admin API key ${i + 1}`,
+    );
   }
 }
 
