@@ -269,6 +269,70 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getCivicsExtractionPrompt', () => {
+    it('returns rendered civics-extraction prompt with all interpolated fields', async () => {
+      const template = {
+        id: '1',
+        name: 'civics-extraction',
+        templateText:
+          'Region: {{REGION_ID}}\nSource: {{SOURCE_URL}}\nGoal: {{CONTENT_GOAL}}\n{{CATEGORY}}{{HINTS}}HTML:\n{{HTML}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getCivicsExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl: 'https://www.assembly.ca.gov/resources/glossary',
+          contentGoal: 'Extract the official Assembly glossary',
+          category: 'Assembly',
+          hints: ['~150 terms organized A-Z'],
+          html: '<html>...</html>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain(
+        'Source: https://www.assembly.ca.gov/resources/glossary',
+      );
+      expect(result.promptText).toContain('Category: Assembly');
+      expect(result.promptText).toContain('- ~150 terms organized A-Z');
+      expect(result.promptText).toContain('<html>...</html>');
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('omits hints section when none provided', async () => {
+      const template = {
+        id: '1',
+        name: 'civics-extraction',
+        templateText: '{{HINTS}}END',
+        version: 1,
+        isActive: true,
+      };
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getCivicsExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl: 'https://example.com',
+          contentGoal: 'extract',
+          html: '<p/>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toBe('END');
+    });
+  });
+
   describe('getPromptHash', () => {
     it('returns SHA-256 hash + version of the active template', async () => {
       const templateText = 'bare template text';
