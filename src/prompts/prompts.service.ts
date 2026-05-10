@@ -7,6 +7,7 @@ import { StructuralAnalysisDto } from './dto/structural-analysis.dto';
 import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
+import { BillExtractionDto } from './dto/bill-extraction.dto';
 
 export interface PromptServiceResponse {
   promptText: string;
@@ -170,6 +171,35 @@ export class PromptsService {
 
     await this.logRequest(
       'civics-extraction',
+      template.version,
+      apiKey,
+      region,
+      template.experimentId,
+      template.variantName,
+    );
+
+    return response;
+  }
+
+  async getBillExtractionPrompt(
+    dto: BillExtractionDto,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptServiceResponse> {
+    const template = await this.resolveTemplate('bill-extraction', apiKey);
+
+    const promptText = this.interpolate(template.templateText, {
+      REGION_ID: dto.regionId,
+      SOURCE_URL: dto.sourceUrl,
+      SESSION_YEAR: dto.sessionYear,
+      HTML: dto.html,
+    });
+
+    const response = this.buildResponse(template);
+    response.promptText = promptText;
+
+    await this.logRequest(
+      'bill-extraction',
       template.version,
       apiKey,
       region,
