@@ -21,6 +21,7 @@ import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
 import { VerifyPromptDto } from './dto/verify-prompt.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
+import { BillExtractionDto } from './dto/bill-extraction.dto';
 
 @ApiTags('prompts')
 @Controller('prompts')
@@ -112,6 +113,32 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getCivicsExtractionPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('bill-extraction')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @ApiOperation({
+    summary:
+      'Get bill-extraction prompt. The LLM is instructed to emit a structured Bill record from a single official legislature bill status page. See OpusPopuli/opuspopuli#686.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Prompt template rendered with variables',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  async billExtraction(
+    @Body() dto: BillExtractionDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillExtractionPrompt(
       dto,
       req.apiKey,
       req.region,
