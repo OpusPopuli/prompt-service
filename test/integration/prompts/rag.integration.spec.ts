@@ -25,6 +25,38 @@ describe('RAG Prompt (integration)', () => {
     expect(res.body.promptText).toContain('ONLY information from the context');
   });
 
+  it('should include civic persona and neutrality instruction', async () => {
+    const res = await apiPost('/prompts/rag', {
+      body: { context: 'Some context.', query: 'A question?' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.promptText).toContain('nonpartisan civic assistant');
+    expect(res.body.promptText).toContain('do not advocate');
+  });
+
+  it('should instruct LLM to respond with JSON { answer, sourcedFrom }', async () => {
+    const res = await apiPost('/prompts/rag', {
+      body: { context: 'Some context.', query: 'A question?' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.promptText).toContain('"answer"');
+    expect(res.body.promptText).toContain('"sourcedFrom"');
+    expect(res.body.promptText).toContain('ONLY valid JSON');
+  });
+
+  it('should include prescribed fallback response for insufficient context', async () => {
+    const res = await apiPost('/prompts/rag', {
+      body: { context: 'Some context.', query: 'A question?' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.promptText).toContain(
+      "I can't fully answer that",
+    );
+  });
+
   it('should return valid metadata (hash, version, expiresAt)', async () => {
     const res = await apiPost('/prompts/rag', {
       body: { context: 'Context.', query: 'Query?' },
