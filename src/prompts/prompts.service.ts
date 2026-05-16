@@ -8,6 +8,7 @@ import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 import { BillExtractionDto } from './dto/bill-extraction.dto';
+import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 
 export interface PromptServiceResponse {
   promptText: string;
@@ -31,6 +32,7 @@ interface ResolvedTemplate {
   templateText: string;
   version: number;
   name: string;
+  variables?: string[];
   experimentId?: string;
   variantName?: string;
 }
@@ -70,6 +72,7 @@ export class PromptsService {
       `structural-schema-${dto.dataType}`,
       'structural-schema-default',
     );
+    this.warnOnVariableDrift(schemaTemplate);
 
     const hintsSection = dto.hints?.length
       ? '## Hints from the region author\n' +
@@ -80,7 +83,7 @@ export class PromptsService {
     const promptText = this.interpolate(template.templateText, {
       DATA_TYPE: dto.dataType,
       CONTENT_GOAL: dto.contentGoal,
-      CATEGORY: dto.category ?? '',
+      CATEGORY: dto.category ? ` (category: ${dto.category})` : '',
       HINTS_SECTION: hintsSection,
       SCHEMA_DESCRIPTION: schemaTemplate.templateText,
       HTML: dto.html,
@@ -116,6 +119,7 @@ export class PromptsService {
     const baseInstructions = await this.getActiveTemplate(
       'document-analysis-base-instructions',
     );
+    this.warnOnVariableDrift(baseInstructions);
 
     const promptText =
       this.interpolate(template.templateText, { TEXT: dto.text }) +
@@ -210,6 +214,39 @@ export class PromptsService {
     return response;
   }
 
+  async getBillVotesExtractionPrompt(
+    dto: BillVotesExtractionDto,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptServiceResponse> {
+    const template = await this.resolveTemplate(
+      'bill-votes-extraction',
+      apiKey,
+    );
+
+    const promptText = this.interpolate(template.templateText, {
+      REGION_ID: dto.regionId,
+      SOURCE_URL: dto.sourceUrl,
+      SESSION_YEAR: dto.sessionYear,
+      BILL_ID: dto.billId,
+      HTML: dto.html,
+    });
+
+    const response = this.buildResponse(template);
+    response.promptText = promptText;
+
+    await this.logRequest(
+      'bill-votes-extraction',
+      template.version,
+      apiKey,
+      region,
+      template.experimentId,
+      template.variantName,
+    );
+
+    return response;
+  }
+
   async getRagPrompt(
     dto: RagDto,
     apiKey: string,
@@ -288,17 +325,22 @@ export class PromptsService {
       apiKey,
     );
     if (experimentResult) {
-      return {
+      const resolved: ResolvedTemplate = {
         templateText: experimentResult.templateText,
         version: experimentResult.version,
         name,
+        // variables not available from experiment variant path
         experimentId: experimentResult.experimentId,
         variantName: experimentResult.variantName,
       };
+      this.warnOnVariableDrift(resolved);
+      return resolved;
     }
 
     // Fall back to default active template
-    return this.getActiveTemplate(name, fallbackName);
+    const resolved = await this.getActiveTemplate(name, fallbackName);
+    this.warnOnVariableDrift(resolved);
+    return resolved;
   }
 
   private async getActiveTemplate(
@@ -319,7 +361,40 @@ export class PromptsService {
       throw new NotFoundException(`Prompt template "${name}" not found`);
     }
 
-    return template;
+    return {
+      templateText: template.templateText,
+      version: template.version,
+      name: template.name,
+      variables: template.variables,
+    };
+  }
+
+  private extractPlaceholders(text: string): Set<string> {
+    const found = new Set<string>();
+    for (const match of text.matchAll(/\{\{([A-Z_]+)\}\}/g)) {
+      found.add(match[1]);
+    }
+    return found;
+  }
+
+  private warnOnVariableDrift(template: ResolvedTemplate): void {
+    if (!template.variables) return;
+    const inText = this.extractPlaceholders(template.templateText);
+    const declared = new Set(template.variables);
+    for (const v of declared) {
+      if (!inText.has(v)) {
+        this.logger.warn(
+          `Template "${template.name}": variable "${v}" declared but not used in template text`,
+        );
+      }
+    }
+    for (const v of inText) {
+      if (!declared.has(v)) {
+        this.logger.warn(
+          `Template "${template.name}": placeholder "{{${v}}}" found in text but not declared in variables`,
+        );
+      }
+    }
   }
 
   private interpolate(

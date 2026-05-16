@@ -21,6 +21,7 @@ describe('PromptsController', () => {
             getRagPrompt: jest.fn(),
             getCivicsExtractionPrompt: jest.fn(),
             getBillExtractionPrompt: jest.fn(),
+            getBillVotesExtractionPrompt: jest.fn(),
             verifyPrompt: jest.fn(),
             getPromptHash: jest.fn(),
           },
@@ -143,6 +144,39 @@ describe('PromptsController', () => {
     });
 
     expect(service.getBillExtractionPrompt).toHaveBeenCalledWith(
+      dto,
+      'key',
+      'ca',
+    );
+    expect(result).toEqual(expected);
+  });
+
+  it('should call billVotesExtraction with correct args', async () => {
+    const dto = {
+      regionId: 'california',
+      sourceUrl:
+        'https://leginfo.legislature.ca.gov/faces/billVotesClient.xhtml?bill_id=202520260AB1',
+      sessionYear: '2025-2026',
+      billId: '202520260AB1',
+      html: '<html/>',
+    };
+    const expected = {
+      promptText: 'rendered',
+      promptHash: 'abc',
+      promptVersion: 'v1',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+    };
+
+    jest
+      .spyOn(service, 'getBillVotesExtractionPrompt')
+      .mockResolvedValue(expected);
+
+    const result = await controller.billVotesExtraction(dto, {
+      apiKey: 'key',
+      region: 'ca',
+    });
+
+    expect(service.getBillVotesExtractionPrompt).toHaveBeenCalledWith(
       dto,
       'key',
       'ca',

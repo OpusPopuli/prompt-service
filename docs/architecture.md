@@ -64,7 +64,7 @@ Primary storage for prompt templates. Each template has a unique name and belong
 |--------|------|-------------|
 | `id` | UUID | Primary key |
 | `name` | String (unique) | Template identifier (e.g., `document-analysis-petition`) |
-| `category` | String | `structural_analysis`, `document_analysis`, or `rag` |
+| `category` | String | `structural_analysis`, `document_analysis`, `rag`, `civics_extraction`, or `bill_extraction` |
 | `description` | String | Human-readable purpose |
 | `template_text` | Text | Template with `{{VARIABLE}}` placeholders |
 | `variables` | String[] | List of expected variable names |
@@ -124,6 +124,7 @@ Analytics table tracking prompt usage, including A/B experiment participation.
 | `endpoint` | String | Which endpoint was called |
 | `prompt_version` | Int | Template version served |
 | `api_key_prefix` | String | First 8 chars of API key (for identification without exposure) |
+| `region` | String | Region identifier from the requesting node's API key |
 | `experiment_id` | String? | Experiment ID if request was part of an A/B test |
 | `variant_name` | String? | Variant name served (e.g., "control", "variant_a") |
 | `created_at` | Timestamptz | Request timestamp |

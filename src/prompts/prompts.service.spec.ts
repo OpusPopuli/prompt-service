@@ -523,6 +523,232 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getBillVotesExtractionPrompt', () => {
+    it('returns rendered bill-votes-extraction prompt with all interpolated fields', async () => {
+      const template = {
+        id: '1',
+        name: 'bill-votes-extraction',
+        templateText:
+          'Region: {{REGION_ID}}\nSource: {{SOURCE_URL}}\nSession: {{SESSION_YEAR}}\nBill: {{BILL_ID}}\nHTML: {{HTML}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillVotesExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl:
+            'https://leginfo.legislature.ca.gov/faces/billVotesClient.xhtml?bill_id=202520260AB1',
+          sessionYear: '2025-2026',
+          billId: '202520260AB1',
+          html: '<html>votes content</html>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain('Session: 2025-2026');
+      expect(result.promptText).toContain('Bill: 202520260AB1');
+      expect(result.promptText).toContain('<html>votes content</html>');
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('throws NotFoundException when bill-votes-extraction template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getBillVotesExtractionPrompt(
+          {
+            regionId: 'california',
+            sourceUrl:
+              'https://leginfo.legislature.ca.gov/faces/billVotesClient.xhtml',
+            sessionYear: '2025-2026',
+            billId: '202520260AB1',
+            html: '<html/>',
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getStructuralAnalysisPrompt — CATEGORY formatting', () => {
+    function makeTemplates(baseText: string) {
+      const base = {
+        id: '1',
+        name: 'structural-analysis',
+        templateText: baseText,
+        version: 1,
+        isActive: true,
+      };
+      const schema = {
+        id: '2',
+        name: 'structural-schema-default',
+        templateText: 'schema',
+        version: 1,
+        isActive: true,
+      };
+      return { base, schema };
+    }
+
+    it('appends (category: X) when category is provided', async () => {
+      const { base, schema } = makeTemplates(
+        'extract {{DATA_TYPE}} data{{CATEGORY}}.',
+      );
+      prisma.promptTemplate.findFirst
+        .mockResolvedValueOnce(base)
+        .mockResolvedValueOnce(schema);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getStructuralAnalysisPrompt(
+        {
+          dataType: 'representatives',
+          contentGoal: 'goal',
+          category: 'Assembly',
+          html: '<div/>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain(
+        'extract representatives data (category: Assembly).',
+      );
+    });
+
+    it('omits category suffix when category is undefined', async () => {
+      const { base, schema } = makeTemplates(
+        'extract {{DATA_TYPE}} data{{CATEGORY}}.',
+      );
+      prisma.promptTemplate.findFirst
+        .mockResolvedValueOnce(base)
+        .mockResolvedValueOnce(schema);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getStructuralAnalysisPrompt(
+        { dataType: 'meetings', contentGoal: 'goal', html: '<div/>' },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toBe('extract meetings data.');
+    });
+  });
+
+  describe('warnOnVariableDrift', () => {
+    function makeTemplate(templateText: string, variables: string[]) {
+      return {
+        id: '1',
+        name: 'rag',
+        templateText,
+        version: 1,
+        isActive: true,
+        variables,
+      };
+    }
+
+    it('does not warn when declared variables match placeholders exactly', async () => {
+      const warnSpy = jest.spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      );
+      prisma.promptTemplate.findFirst.mockResolvedValue(
+        makeTemplate('{{CONTEXT}} {{QUERY}}', ['CONTEXT', 'QUERY']),
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+        'ca',
+      );
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('drift'),
+      );
+    });
+
+    it('warns when a declared variable has no matching placeholder in template text', async () => {
+      const warnSpy = jest.spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      );
+      prisma.promptTemplate.findFirst.mockResolvedValue(
+        makeTemplate('{{CONTEXT}}', ['CONTEXT', 'QUERY']),
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+        'ca',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"QUERY" declared but not used'),
+      );
+    });
+
+    it('warns when a placeholder in template text is not declared in variables', async () => {
+      const warnSpy = jest.spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      );
+      prisma.promptTemplate.findFirst.mockResolvedValue(
+        makeTemplate('{{CONTEXT}} {{QUERY}} {{UNDECLARED}}', [
+          'CONTEXT',
+          'QUERY',
+        ]),
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+        'ca',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '"{{UNDECLARED}}" found in text but not declared',
+        ),
+      );
+    });
+
+    it('skips drift check when variables field is absent (experiment path)', async () => {
+      experiments.resolveExperiment.mockResolvedValue({
+        templateText: '{{CONTEXT}} {{QUERY}} {{ORPHAN}}',
+        version: 2,
+        experimentId: 'exp-1',
+        variantName: 'variant_a',
+      });
+      const warnSpy = jest.spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getRagPrompt(
+        { context: 'ctx', query: 'q' },
+        'test-key',
+        'ca',
+      );
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('declared but not used'),
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('found in text but not declared'),
+      );
+    });
+  });
+
   describe('A/B testing integration', () => {
     it('should serve experiment variant when active experiment exists', async () => {
       experiments.resolveExperiment.mockResolvedValue({
