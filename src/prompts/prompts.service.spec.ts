@@ -333,6 +333,61 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getBillExtractionPrompt', () => {
+    it('returns rendered bill-extraction prompt with all interpolated fields', async () => {
+      const template = {
+        id: '1',
+        name: 'bill-extraction',
+        templateText:
+          'Region: {{REGION_ID}}\nSource: {{SOURCE_URL}}\nSession: {{SESSION_YEAR}}\nHTML: {{HTML}}',
+        version: 1,
+        isActive: true,
+      };
+
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl:
+            'https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202520260AB1',
+          sessionYear: '2025-2026',
+          html: '<html>bill content</html>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain(
+        'Source: https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202520260AB1',
+      );
+      expect(result.promptText).toContain('Session: 2025-2026');
+      expect(result.promptText).toContain('<html>bill content</html>');
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('throws NotFoundException when bill-extraction template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getBillExtractionPrompt(
+          {
+            regionId: 'california',
+            sourceUrl:
+              'https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202520260AB1',
+            sessionYear: '2025-2026',
+            html: '<html/>',
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getPromptHash', () => {
     it('returns SHA-256 hash + version of the active template', async () => {
       const templateText = 'bare template text';

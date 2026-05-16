@@ -19,6 +19,8 @@ describe('PromptsController', () => {
             getStructuralAnalysisPrompt: jest.fn(),
             getDocumentAnalysisPrompt: jest.fn(),
             getRagPrompt: jest.fn(),
+            getCivicsExtractionPrompt: jest.fn(),
+            getBillExtractionPrompt: jest.fn(),
             verifyPrompt: jest.fn(),
             getPromptHash: jest.fn(),
           },
@@ -115,6 +117,36 @@ describe('PromptsController', () => {
     });
 
     expect(service.getRagPrompt).toHaveBeenCalledWith(dto, 'key', 'ca');
+    expect(result).toEqual(expected);
+  });
+
+  it('should call billExtraction with correct args', async () => {
+    const dto = {
+      regionId: 'california',
+      sourceUrl:
+        'https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202520260AB1',
+      sessionYear: '2025-2026',
+      html: '<html/>',
+    };
+    const expected = {
+      promptText: 'rendered',
+      promptHash: 'abc',
+      promptVersion: 'v1',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+    };
+
+    jest.spyOn(service, 'getBillExtractionPrompt').mockResolvedValue(expected);
+
+    const result = await controller.billExtraction(dto, {
+      apiKey: 'key',
+      region: 'ca',
+    });
+
+    expect(service.getBillExtractionPrompt).toHaveBeenCalledWith(
+      dto,
+      'key',
+      'ca',
+    );
     expect(result).toEqual(expected);
   });
 

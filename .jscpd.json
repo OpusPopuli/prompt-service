@@ -1,0 +1,16 @@
+{
+  "threshold": 0,
+  "minLines": 8,
+  "minTokens": 60,
+  "languages": ["typescript"],
+  "path": ["src"],
+  "ignore": [
+    "**/*.spec.ts",
+    "**/*.dto.ts",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**"
+  ],
+  "reporters": ["consoleFull"],
+  "exitCode": 1
+}

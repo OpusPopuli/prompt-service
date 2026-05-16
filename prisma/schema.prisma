@@ -10,7 +10,7 @@ datasource db {
 model PromptTemplate {
   id           String   @id @default(uuid())
   name         String   @unique
-  category     String   // structural_analysis, document_analysis, rag, civics_extraction
+  category     String   // structural_analysis, document_analysis, rag, civics_extraction, bill_extraction
   description  String
   templateText String   @map("template_text") @db.Text
   variables    String[] @default([])

@@ -1,4 +1,5 @@
 import {
+  applyDecorators,
   Body,
   Controller,
   Get,
@@ -21,6 +22,22 @@ import { DocumentAnalysisDto } from './dto/document-analysis.dto';
 import { RagDto } from './dto/rag.dto';
 import { VerifyPromptDto } from './dto/verify-prompt.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
+import { BillExtractionDto } from './dto/bill-extraction.dto';
+
+const INVALID_API_KEY = 'Invalid API key';
+const TEMPLATE_NOT_FOUND = 'Template not found';
+
+function ApiPromptResponses() {
+  return applyDecorators(
+    ApiResponse({
+      status: 200,
+      description: 'Prompt template rendered with variables',
+    }),
+    ApiResponse({ status: 401, description: INVALID_API_KEY }),
+    ApiResponse({ status: 404, description: TEMPLATE_NOT_FOUND }),
+    ApiResponse({ status: 429, description: 'Rate limit exceeded' }),
+  );
+}
 
 @ApiTags('prompts')
 @Controller('prompts')
@@ -32,13 +49,7 @@ export class PromptsController {
   @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get structural analysis prompt' })
-  @ApiResponse({
-    status: 200,
-    description: 'Prompt template rendered with variables',
-  })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  @ApiPromptResponses()
   async structuralAnalysis(
     @Body() dto: StructuralAnalysisDto,
     @Req() req: { apiKey: string; region: string },
@@ -55,13 +66,7 @@ export class PromptsController {
   @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get document analysis prompt' })
-  @ApiResponse({
-    status: 200,
-    description: 'Prompt template rendered with variables',
-  })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  @ApiPromptResponses()
   async documentAnalysis(
     @Body() dto: DocumentAnalysisDto,
     @Req() req: { apiKey: string; region: string },
@@ -78,13 +83,7 @@ export class PromptsController {
   @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get RAG prompt' })
-  @ApiResponse({
-    status: 200,
-    description: 'Prompt template rendered with variables',
-  })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  @ApiPromptResponses()
   async rag(
     @Body() dto: RagDto,
     @Req() req: { apiKey: string; region: string },
@@ -100,13 +99,7 @@ export class PromptsController {
     summary:
       'Get civics-extraction prompt. The LLM is instructed to emit a CivicsBlock with verbatim source text + plain-language rewrites for laypeople. See OpusPopuli/opuspopuli#669.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Prompt template rendered with variables',
-  })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  @ApiPromptResponses()
   async civicsExtraction(
     @Body() dto: CivicsExtractionDto,
     @Req() req: { apiKey: string; region: string },
@@ -118,12 +111,32 @@ export class PromptsController {
     );
   }
 
+  @Post('bill-extraction')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @ApiOperation({
+    summary:
+      'Get bill-extraction prompt. The LLM is instructed to emit a structured Bill record from a single official legislature bill status page. See OpusPopuli/opuspopuli#686.',
+  })
+  @ApiPromptResponses()
+  async billExtraction(
+    @Body() dto: BillExtractionDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillExtractionPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
   @Post('verify')
   @UseGuards(ApiKeyGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify a prompt hash is authentic' })
   @ApiResponse({ status: 200, description: 'Verification result' })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  @ApiResponse({ status: 401, description: INVALID_API_KEY })
   async verify(@Body() dto: VerifyPromptDto) {
     return this.promptsService.verifyPrompt(dto.promptHash, dto.promptVersion);
   }
@@ -143,8 +156,8 @@ export class PromptsController {
     status: 200,
     description: 'Current hash + version of the template',
   })
-  @ApiResponse({ status: 401, description: 'Invalid API key' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
+  @ApiResponse({ status: 401, description: INVALID_API_KEY })
+  @ApiResponse({ status: 404, description: TEMPLATE_NOT_FOUND })
   async hash(@Param('name') name: string) {
     return this.promptsService.getPromptHash(name);
   }

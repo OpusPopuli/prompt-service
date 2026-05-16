@@ -30,6 +30,22 @@ export class NodeRegistryService {
     return createHash('sha256').update(apiKey).digest('hex');
   }
 
+  private certificationExpiresAt(dto: CertifyNodeDto): Date {
+    const expiresInDays = dto.expiresInDays ?? 365;
+    const date = new Date();
+    date.setDate(date.getDate() + expiresInDays);
+    return date;
+  }
+
+  private async findNodeOrThrow(
+    client: Pick<PrismaService, 'node'>,
+    id: string,
+  ) {
+    const node = await client.node.findUnique({ where: { id } });
+    if (!node) throw new NotFoundException(`Node ${id} not found`);
+    return node;
+  }
+
   async registerNode(dto: CreateNodeDto, adminKeyPrefix: string) {
     const apiKey = this.generateApiKey();
     const apiKeyHash = this.hashApiKey(apiKey);
@@ -100,8 +116,7 @@ export class NodeRegistryService {
   }
 
   async updateNode(id: string, dto: UpdateNodeDto) {
-    const node = await this.prisma.node.findUnique({ where: { id } });
-    if (!node) throw new NotFoundException(`Node ${id} not found`);
+    await this.findNodeOrThrow(this.prisma, id);
 
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
@@ -113,26 +128,19 @@ export class NodeRegistryService {
 
   async certifyNode(id: string, dto: CertifyNodeDto, adminKeyPrefix: string) {
     return this.prisma.$transaction(async (tx) => {
-      const node = await tx.node.findUnique({ where: { id } });
-      if (!node) throw new NotFoundException(`Node ${id} not found`);
+      const node = await this.findNodeOrThrow(tx, id);
       if (node.status === 'decertified') {
         throw new BadRequestException(
           'Cannot certify a decertified node. Use recertify instead.',
         );
       }
 
-      const expiresInDays = dto.expiresInDays ?? 365;
-      const certificationExpiresAt = new Date();
-      certificationExpiresAt.setDate(
-        certificationExpiresAt.getDate() + expiresInDays,
-      );
-
       const updated = await tx.node.update({
         where: { id },
         data: {
           status: 'certified',
           certifiedAt: new Date(),
-          certificationExpiresAt,
+          certificationExpiresAt: this.certificationExpiresAt(dto),
         },
       });
 
@@ -155,8 +163,7 @@ export class NodeRegistryService {
     adminKeyPrefix: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const node = await tx.node.findUnique({ where: { id } });
-      if (!node) throw new NotFoundException(`Node ${id} not found`);
+      await this.findNodeOrThrow(tx, id);
 
       const updated = await tx.node.update({
         where: { id },
@@ -181,21 +188,14 @@ export class NodeRegistryService {
 
   async recertifyNode(id: string, dto: CertifyNodeDto, adminKeyPrefix: string) {
     return this.prisma.$transaction(async (tx) => {
-      const node = await tx.node.findUnique({ where: { id } });
-      if (!node) throw new NotFoundException(`Node ${id} not found`);
-
-      const expiresInDays = dto.expiresInDays ?? 365;
-      const certificationExpiresAt = new Date();
-      certificationExpiresAt.setDate(
-        certificationExpiresAt.getDate() + expiresInDays,
-      );
+      await this.findNodeOrThrow(tx, id);
 
       const updated = await tx.node.update({
         where: { id },
         data: {
           status: 'certified',
           certifiedAt: new Date(),
-          certificationExpiresAt,
+          certificationExpiresAt: this.certificationExpiresAt(dto),
           decertifiedAt: null,
         },
       });
@@ -214,8 +214,7 @@ export class NodeRegistryService {
   }
 
   async rotateApiKey(id: string, adminKeyPrefix: string) {
-    const existingNode = await this.prisma.node.findUnique({ where: { id } });
-    if (!existingNode) throw new NotFoundException(`Node ${id} not found`);
+    const existingNode = await this.findNodeOrThrow(this.prisma, id);
 
     const newApiKey = this.generateApiKey();
     const newApiKeyHash = this.hashApiKey(newApiKey);
@@ -264,8 +263,7 @@ export class NodeRegistryService {
   }
 
   async deleteNode(id: string) {
-    const node = await this.prisma.node.findUnique({ where: { id } });
-    if (!node) throw new NotFoundException(`Node ${id} not found`);
+    const node = await this.findNodeOrThrow(this.prisma, id);
 
     await this.prisma.node.delete({ where: { id } });
 
