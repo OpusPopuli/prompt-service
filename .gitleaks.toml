@@ -1,0 +1,24 @@
+# gitleaks configuration for Opus Populi prompt-service
+# All suppressed findings are intentional false positives:
+#   - .env.example files: templates documenting required variables.
+#   - Test spec files: obviously fake keys/tokens as test fixtures.
+#   - Postman collection: example/demo API keys for local dev only.
+#   - Docs and README: illustrative placeholder values.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example files, test fixtures, Postman demo values, and docs"
+paths = [
+  # Example/template env files — values are intentional placeholders
+  '''.env\.example''',
+  # Test spec files — fake keys/tokens are fixtures, not real secrets
+  '''.*\.spec\.ts''',
+  # Postman collection — contains demo API keys for local dev only
+  '''postman/.*''',
+  # Documentation and README examples (illustrative values)
+  '''.*README\.md''',
+  '''docs/.*''',
+  '''CLAUDE\.md''',
+]
