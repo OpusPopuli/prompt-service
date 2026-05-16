@@ -41,7 +41,7 @@ cp .env.example .env
 pnpm install
 pnpm db:generate
 
-# Seed all 13 prompt templates
+# Seed all 21 prompt templates
 pnpm db:seed
 ```
 
@@ -91,7 +91,11 @@ Prompt endpoints support **Bearer token** auth (region/env var keys) and **HMAC 
 | `POST` | `/prompts/structural-analysis` | Web scraping extraction prompt |
 | `POST` | `/prompts/document-analysis` | Document analysis prompt |
 | `POST` | `/prompts/rag` | RAG answer generation prompt |
+| `POST` | `/prompts/civics-extraction` | Civics-process data extraction prompt |
+| `POST` | `/prompts/bill-extraction` | Legislative bill extraction prompt |
+| `POST` | `/prompts/bill-votes-extraction` | Bill roll-call vote extraction prompt |
 | `POST` | `/prompts/verify` | Verify a prompt hash is authentic |
+| `GET`  | `/prompts/:name/hash` | Get hash of a named template (cache invalidation) |
 
 ### Admin: Template Management (Admin API Key)
 
@@ -154,7 +158,7 @@ Interactive API docs are available at `http://localhost:3200/api` (Swagger UI).
 | `pnpm db:generate` | Generate Prisma client |
 | `pnpm db:migrate` | Create and run migrations |
 | `pnpm db:migrate:deploy` | Run pending migrations (production) |
-| `pnpm db:seed` | Seed all 13 prompt templates |
+| `pnpm db:seed` | Seed all 21 prompt templates |
 | `pnpm db:studio` | Open Prisma Studio GUI |
 | `pnpm integration:up` | Start integration test stack (Docker) |
 | `pnpm integration:down` | Tear down integration test stack |
@@ -167,7 +171,7 @@ Interactive API docs are available at `http://localhost:3200/api` (Swagger UI).
 prompt-service/
 ├── prisma/
 │   ├── schema.prisma          # Database schema (templates, versions, experiments)
-│   └── seed.ts                # Seeds all 13 prompt templates
+│   └── seed.ts                # Seeds all 21 prompt templates
 ├── src/
 │   ├── auth/
 │   │   ├── api-key.guard.ts   # Node auth: Bearer tokens + HMAC request signing
@@ -206,25 +210,38 @@ prompt-service/
 
 ## Prompt Templates
 
-The service ships with 13 seeded templates across 3 categories:
+The service ships with 21 seeded templates across 5 categories:
 
-**Structural Analysis** (5 templates) — Used by the scraping pipeline to extract structured data from web pages:
+**Structural Analysis** (7 templates) — Used by the scraping pipeline to extract structured data from web pages:
 - `structural-analysis` — Base extraction rules template
 - `structural-schema-propositions` — Ballot measure schema
 - `structural-schema-meetings` — Meeting/hearing schema
 - `structural-schema-representatives` — Legislator schema
+- `structural-schema-campaign_finance` — Campaign finance contribution schema
+- `structural-schema-lobbying` — Lobbying filing schema
 - `structural-schema-default` — Fallback for unknown types
 
-**Document Analysis** (6 templates) — Used to analyze uploaded documents:
-- `document-analysis-base-instructions` — Shared JSON-only instructions
+**Document Analysis** (10 templates) — Used to analyze uploaded documents:
+- `document-analysis-base-instructions` — Shared civic platform context and JSON-only output instructions
 - `document-analysis-generic` — Generic document analysis
 - `document-analysis-petition` — Petition analysis (nonpartisan)
-- `document-analysis-proposition` — Ballot proposition analysis
+- `document-analysis-proposition` — Ballot proposition quick-metadata extraction
+- `document-analysis-proposition-analysis` — Full detail-page analysis with citations and section anchors
+- `document-analysis-representative-bio` — Legislator biography generation with claim attribution
+- `document-analysis-representative-committees-summary` — Committee assignment summary
+- `document-analysis-legislative-committee-description` — Committee function description
 - `document-analysis-contract` — Contract analysis
 - `document-analysis-form` — Form analysis
 
 **RAG** (1 template) — Used for knowledge retrieval Q&A:
 - `rag` — Context-grounded answer generation
+
+**Civics Extraction** (1 template) — Used to extract structured civic-process data:
+- `civics-extraction` — Extracts `CivicsBlock` (chambers, measure types, lifecycle stages, glossary) from official government pages
+
+**Bill Extraction** (2 templates) — Used by the bill ingest pipeline:
+- `bill-extraction` — Extracts a structured Bill record from a legislature bill status page
+- `bill-votes-extraction` — Extracts roll-call vote records from a legislature bill votes page
 
 ## Postman Collection
 

@@ -11,6 +11,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix && eslint \"{src,test}/**/*.ts\" -c .eslintrc.sonar.js",
+    "lint:sonar": "eslint \"{src,test}/**/*.ts\" -c .eslintrc.sonar.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",

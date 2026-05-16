@@ -106,6 +106,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 |-------|-------|--------|
 | Global | 60 requests | 1 minute |
 | Prompt endpoints | 30 requests | 1 minute |
+| `GET /prompts/:name/hash` | 120 requests | 1 minute |
 
 When exceeded, returns `429 Too Many Requests`.
 
@@ -122,7 +123,7 @@ Health check endpoint. No authentication required.
   "status": "ok",
   "timestamp": "2025-02-25T12:00:00.000Z",
   "database": "connected",
-  "activeTemplates": 13
+  "activeTemplates": 21
 }
 ```
 
@@ -176,6 +177,8 @@ Returns a rendered prompt for web page structural analysis (scraping pipeline).
 2. Looks up schema template: `structural-schema-{dataType}` (e.g., `structural-schema-propositions`)
 3. Falls back to `structural-schema-default` if the specific schema doesn't exist
 
+Schema templates exist for: `propositions`, `meetings`, `representatives`, `campaign_finance`, `lobbying`. All other data types fall back to `structural-schema-default`.
+
 ---
 
 ## `POST /prompts/document-analysis`
@@ -218,7 +221,11 @@ Returns a rendered prompt for document analysis (petition scanning, proposition 
 | Type | Template | Description |
 |------|----------|-------------|
 | `petition` | `document-analysis-petition` | Nonpartisan petition analysis with impact, beneficiaries, concerns |
-| `proposition` | `document-analysis-proposition` | Ballot proposition analysis |
+| `proposition` | `document-analysis-proposition` | Ballot proposition quick-metadata extraction |
+| `proposition-analysis` | `document-analysis-proposition-analysis` | Full detail-page analysis with citations and section anchors |
+| `representative-bio` | `document-analysis-representative-bio` | Legislator biography generation with claim attribution |
+| `representative-committees-summary` | `document-analysis-representative-committees-summary` | Committee assignment summary |
+| `legislative-committee-description` | `document-analysis-legislative-committee-description` | Committee function description |
 | `contract` | `document-analysis-contract` | Contract terms, obligations, risks |
 | `form` | `document-analysis-form` | Form purpose, required fields, deadlines |
 | `generic` | `document-analysis-generic` | Fallback for unknown types |
@@ -251,6 +258,100 @@ Returns a rendered prompt for RAG (Retrieval-Augmented Generation) answer genera
   "promptHash": "c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890a1b2",
   "promptVersion": "v1",
   "expiresAt": "2026-02-25T13:00:00.000Z"
+}
+```
+
+---
+
+## `POST /prompts/civics-extraction`
+
+Returns a rendered prompt for civics-process data extraction. The LLM is instructed to emit a `CivicsBlock` JSON object (chambers, measure types, lifecycle stages with status patterns, glossary, session scheme) from official government pages describing how a region's legislature works.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `regionId` | string | Yes | Region identifier (e.g., `"california"`) |
+| `sourceUrl` | string | Yes | URL the HTML was scraped from — used in `CivicText.sourceUrl` citations |
+| `contentGoal` | string | Yes | Natural-language extraction goal from the region config |
+| `category` | string | No | Optional sub-category (e.g., `"Assembly"`) |
+| `hints` | string[] | No | Hints from region author to scope extraction |
+| `html` | string | Yes | Raw HTML scraped from the source URL |
+
+---
+
+## `POST /prompts/bill-extraction`
+
+Returns a rendered prompt for legislative bill extraction. The LLM is instructed to emit a structured `Bill` record from an official legislature bill status page. Includes prompt-injection defenses for untrusted HTML content.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `regionId` | string | Yes | Region identifier (e.g., `"california"`) |
+| `sourceUrl` | string | Yes | URL the HTML was scraped from |
+| `sessionYear` | string | Yes | Legislative session in `YYYY-YYYY` format (e.g., `"2025-2026"`) |
+| `html` | string | Yes | Raw HTML of the bill status page |
+
+**Notes:** The LLM may return `{ "skip": true }` if the URL doesn't contain `billStatusClient`, the page is a 404, or no recognizable bill data is present. `votes` is always `[]` — use `bill-votes-extraction` to extract roll-call vote data.
+
+---
+
+## `POST /prompts/bill-votes-extraction`
+
+Returns a rendered prompt for bill vote extraction. The LLM is instructed to emit structured chamber-level roll-call vote records (including per-member positions) from an official legislature bill votes page. Companion to `bill-extraction` — votes are always extracted in a separate call.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `regionId` | string | Yes | Region identifier (e.g., `"california"`) |
+| `sourceUrl` | string | Yes | URL the HTML was scraped from |
+| `sessionYear` | string | Yes | Legislative session in `YYYY-YYYY` format (e.g., `"2025-2026"`) |
+| `billId` | string | Yes | Raw bill ID (e.g., `"202520260AB1"`) — used as the system key |
+| `html` | string | Yes | Raw HTML of the bill votes page |
+
+### LLM Response Shape
+
+```json
+{
+  "billId": "202520260AB1",
+  "votes": [
+    {
+      "chamber": "Assembly",
+      "date": "2025-05-01",
+      "motionText": "Do Pass",
+      "yesCount": 42,
+      "noCount": 28,
+      "members": [
+        { "name": "Member Name", "position": "yes", "party": "D" }
+      ]
+    }
+  ]
+}
+```
+
+Position values: `yes | no | abstain | absent | excused | no_vote`
+
+---
+
+## `GET /prompts/:name/hash`
+
+Returns the current hash and version of a named template without interpolation. Used by clients to cheaply check whether a cached prompt is stale. Rate limit: 120 requests per minute.
+
+### Path Parameter
+
+| Param | Description |
+|-------|-------------|
+| `name` | Template name (e.g., `"structural-analysis"`, `"bill-extraction"`) |
+
+### Response
+
+```json
+{
+  "name": "bill-extraction",
+  "promptHash": "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "promptVersion": "v1"
 }
 ```
 

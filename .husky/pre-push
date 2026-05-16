@@ -7,34 +7,81 @@ echo ""
 echo "Checking for duplicate code..."
 pnpm jscpd || exit 1
 
-# ── 3. AI review gate ────────────────────────────────────────────────────────
+# ── 3. SonarJS lint gate ──────────────────────────────────────────────────────
+echo ""
+echo "Running SonarJS checks..."
+pnpm lint:sonar || exit 1
+
+# ── 4. Dependency vulnerability audit ────────────────────────────────────────
+# Blocks on HIGH and CRITICAL CVEs in production dependencies.
+# Run `pnpm audit --fix` or add a pnpm.overrides entry to resolve failures.
+echo ""
+echo "Running dependency vulnerability audit..."
+pnpm audit --prod --audit-level=high 2>&1
+AUDIT_EXIT=$?
+if [ $AUDIT_EXIT -ne 0 ]; then
+  printf '\nPush blocked: HIGH or CRITICAL CVEs found in production dependencies.\n'
+  printf 'Fix with: pnpm audit --fix   or add a version override to package.json > pnpm.overrides\n'
+  exit 1
+fi
+
+# ── 5. Trivy filesystem scan ──────────────────────────────────────────────────
+if command -v trivy >/dev/null 2>&1; then
+  echo ""
+  echo "Running Trivy filesystem scan..."
+  trivy fs . --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --quiet 2>&1
+  TRIVY_EXIT=$?
+  if [ $TRIVY_EXIT -ne 0 ]; then
+    printf '\nPush blocked: HIGH or CRITICAL CVEs found by Trivy.\n'
+    printf 'Run /op-security for a full breakdown and fix guidance.\n'
+    exit 1
+  fi
+else
+  echo "Warning: trivy not found — install with: brew install trivy"
+fi
+
+# ── 6. Secret scan ────────────────────────────────────────────────────────────
+if command -v gitleaks >/dev/null 2>&1; then
+  echo ""
+  echo "Running secret scan..."
+  gitleaks detect --source . --no-banner --config .gitleaks.toml --exit-code 1 2>&1
+  if [ $? -ne 0 ]; then
+    printf '\nPush blocked: potential secrets detected by gitleaks.\n'
+    printf 'Review the findings above. If a finding is a false positive, add it to .gitleaks.toml allowlist\n'
+    exit 1
+  fi
+else
+  echo "Warning: gitleaks not found — install with: brew install gitleaks"
+fi
+
+# ── 7. Load claude CLI ────────────────────────────────────────────────────────
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" --no-use
 
 CLAUDE=$(command -v claude 2>/dev/null)
-if [ -z "$CLAUDE" ]; then
-  echo "Warning: claude CLI not found — skipping AI review."
-  exit 0
-fi
 
-echo ""
-echo "Running AI security review..."
-
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
+BASE=$(git merge-base HEAD origin/develop 2>/dev/null \
+     || git merge-base HEAD origin/main 2>/dev/null \
+     || echo "HEAD~1")
 DIFF=$(git diff "$BASE"..HEAD 2>/dev/null | head -c 30000)
 
-if [ -z "$DIFF" ]; then
-  exit 0
-fi
+# ── 8. AI code review gate ────────────────────────────────────────────────────
+if [ -z "$CLAUDE" ]; then
+  echo "Warning: claude CLI not found — skipping AI review."
+elif [ -z "$DIFF" ]; then
+  echo "No diff to review."
+else
+  echo ""
+  echo "Running AI code review..."
 
-RESULT=$("$CLAUDE" --print "You are a pre-push security review gate for the Opus Populi prompt-service (private NestJS microservice serving AI prompt templates; HMAC-authenticated).
+  RESULT=$("$CLAUDE" --print "You are a pre-push code review gate for the Opus Populi prompt-service (private NestJS microservice serving AI prompt templates via HMAC-authenticated HTTP to federated nodes).
 
 Review the following git diff for BLOCKING issues only:
-1. Exposed secrets, API keys, or credentials committed in code
-2. Auth bypass — HMAC signature verification skipped, admin endpoints unguarded
-3. Prompt template text leaking through unauthenticated endpoints
-4. SQL/NoSQL injection, command injection
-5. Critical bugs that would corrupt prompt templates or break HMAC auth
+1. Critical bugs that would break production (unhandled nulls on hot paths, wrong DB writes, broken interpolation)
+2. GPL-licensed dependency additions (violates AGPL dual-license structure — prefer Apache 2.0 or MIT)
+3. Breaking changes to the prompt response contract ({ promptText, promptHash, promptVersion, expiresAt }) or HMAC authentication
+
+Minor code quality issues are NOT blocking — only flag things that would cause a production outage or license violation.
 
 Respond with EXACTLY one of:
   PASS
@@ -43,9 +90,47 @@ Respond with EXACTLY one of:
 Diff:
 $DIFF" 2>/dev/null)
 
-echo "$RESULT"
+  echo "$RESULT"
 
-if printf '%s' "$RESULT" | grep -q "^FAIL:"; then
-  printf '\nPush blocked by AI review. Fix the issue above or use git push --no-verify to override.\n'
-  exit 1
+  if printf '%s' "$RESULT" | grep -q "^FAIL:"; then
+    printf '\nPush blocked by AI review. Fix the issue above or use git push --no-verify to override.\n'
+    exit 1
+  fi
+fi
+
+# ── 9. AI security review gate ────────────────────────────────────────────────
+if [ -z "$CLAUDE" ]; then
+  echo "Warning: claude CLI not found — skipping security review."
+elif [ -z "$DIFF" ]; then
+  echo "No diff to review."
+else
+  echo ""
+  echo "Running AI security review..."
+
+  SEC_RESULT=$("$CLAUDE" --print "You are a security-focused pre-push gate for the Opus Populi prompt-service (private NestJS microservice; HMAC-authenticated; serves proprietary AI prompt templates).
+
+Analyze the following git diff for HIGH-CONFIDENCE security vulnerabilities only. Ignore theoretical issues, rate limiting, and DoS concerns.
+
+Check for:
+1. Exposed secrets, API keys, or credentials committed in code
+2. Auth bypass — HMAC signature verification skipped, admin endpoints unguarded, ApiKeyGuard missing on prompt endpoints
+3. Prompt template text leaking through unauthenticated endpoints
+4. SQL/NoSQL injection, command injection
+5. SSRF — user-controlled URLs fetched by the server without host validation
+6. Path traversal in file operations
+7. Insecure deserialization (eval, Function constructor with user input)
+
+Respond with EXACTLY one of:
+  PASS
+  FAIL: <one sentence describing the specific vulnerability and file/line>
+
+Diff:
+$DIFF" 2>/dev/null)
+
+  echo "$SEC_RESULT"
+
+  if printf '%s' "$SEC_RESULT" | grep -q "^FAIL:"; then
+    printf '\nPush blocked by security review. Fix the vulnerability above or use git push --no-verify to override.\n'
+    exit 1
+  fi
 fi

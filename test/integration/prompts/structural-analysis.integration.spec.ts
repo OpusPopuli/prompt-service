@@ -32,6 +32,24 @@ describe('Structural Analysis Prompt (integration)', () => {
     );
   });
 
+  it('should include (category: X) in the task line when category is provided', async () => {
+    const res = await apiPost('/prompts/structural-analysis', {
+      body: { ...validPayload, category: 'Assembly' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.promptText).toContain('(category: Assembly)');
+  });
+
+  it('should omit category suffix when category is not provided', async () => {
+    const res = await apiPost('/prompts/structural-analysis', {
+      body: validPayload,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.promptText).not.toContain('(category:');
+  });
+
   it('should include hints section when provided', async () => {
     const res = await apiPost('/prompts/structural-analysis', {
       body: {

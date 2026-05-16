@@ -23,6 +23,7 @@ import { RagDto } from './dto/rag.dto';
 import { VerifyPromptDto } from './dto/verify-prompt.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 import { BillExtractionDto } from './dto/bill-extraction.dto';
+import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -125,6 +126,26 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillExtractionPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('bill-votes-extraction')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @ApiOperation({
+    summary:
+      'Get bill-votes-extraction prompt. The LLM is instructed to emit structured chamber-level roll-call vote records (per-member positions) from a billVotesClient page. See OpusPopuli/opuspopuli#686.',
+  })
+  @ApiPromptResponses()
+  async billVotesExtraction(
+    @Body() dto: BillVotesExtractionDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillVotesExtractionPrompt(
       dto,
       req.apiKey,
       req.region,
