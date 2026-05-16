@@ -18,7 +18,7 @@ export default async function globalSetup() {
       const res = await fetch(healthUrl);
       if (res.ok) {
         const body = await res.json();
-        if (body.status === 'ok' && body.activeTemplates >= 17) {
+        if (body.status === 'ok' && body.activeTemplates >= 20) {
           console.log(
             `Prompt service ready: ${body.activeTemplates} templates loaded\n`,
           );
