@@ -52,9 +52,10 @@ The client implements a 3-tier fallback so nodes degrade gracefully if this serv
 | `structural_analysis` | AI extraction of page structure / manifest generation |
 | `document_analysis` | Per-document content analysis (petitions, propositions, minutes, etc.) |
 | `rag` | Retrieval-augmented generation (citizen Q&A) |
-| `civics_extraction` | Structured civic-process data extraction (`CivicsBlock`) |
+| `civics_extraction` | Structured civic-process data extraction (`CivicsBlock` — chambers, measure types, lifecycle stages, glossary) |
+| `bill_extraction` | Legislative bill and vote record extraction |
 
-Template names follow the pattern `{category}-{document-type}`, e.g. `document-analysis-petition`, `civics-extraction-assembly-process`.
+Template names follow the pattern `{category}-{document-type}` or just `{category}` for single-template categories, e.g. `document-analysis-petition`, `civics-extraction`, `bill-extraction`, `bill-votes-extraction`.
 
 Template variables use `{{VARIABLE_NAME}}` placeholders. The `variables` array on the template must list every placeholder used in `templateText`.
 
