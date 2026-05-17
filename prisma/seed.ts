@@ -653,7 +653,8 @@ No markdown fences. No commentary outside the JSON.`,
   {
     name: 'document-analysis-proposition',
     category: 'document_analysis',
-    description: 'Ballot proposition quick-metadata extraction. Use for lightweight listing-page data. For the full detail-page analysis with citations and section anchors, use document-analysis-proposition-analysis.',
+    description:
+      'Ballot proposition quick-metadata extraction. Use for lightweight listing-page data. For the full detail-page analysis with citations and section anchors, use document-analysis-proposition-analysis.',
     variables: ['TEXT'],
     templateText: `You are a nonpartisan civic analyst. Analyze this ballot proposition.
 
@@ -888,7 +889,8 @@ Respond with JSON:
   {
     name: 'rag',
     category: 'rag',
-    description: 'RAG answer generation prompt — returns JSON { answer, sourcedFrom }',
+    description:
+      'RAG answer generation prompt — returns JSON { answer, sourcedFrom }',
     variables: ['CONTEXT', 'QUERY'],
     templateText: `You are a nonpartisan civic assistant for Opus Populi. Answer questions about civic topics based only on the provided context. Stay neutral — do not advocate for or against any position, measure, or candidate.
 

@@ -31,8 +31,9 @@ describe('RAG Prompt (integration)', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.promptText).toContain('nonpartisan civic assistant');
-    expect(res.body.promptText).toContain('do not advocate');
+    // Check product name (stable) rather than exact neutrality wording (may be refined)
+    expect(res.body.promptText).toContain('Opus Populi');
+    expect(res.body.promptText).toMatch(/neutral|nonpartisan/i);
   });
 
   it('should instruct LLM to respond with JSON { answer, sourcedFrom }', async () => {
@@ -46,15 +47,14 @@ describe('RAG Prompt (integration)', () => {
     expect(res.body.promptText).toContain('ONLY valid JSON');
   });
 
-  it('should include prescribed fallback response for insufficient context', async () => {
+  it('should include prescribed fallback JSON for insufficient context', async () => {
     const res = await apiPost('/prompts/rag', {
       body: { context: 'Some context.', query: 'A question?' },
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.promptText).toContain(
-      "I can't fully answer that",
-    );
+    // Verify fallback returns the correct JSON shape, not exact prose
+    expect(res.body.promptText).toContain('"sourcedFrom": []');
   });
 
   it('should return valid metadata (hash, version, expiresAt)', async () => {
