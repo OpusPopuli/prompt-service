@@ -642,6 +642,8 @@ describe('PromptsService', () => {
   });
 
   describe('warnOnVariableDrift', () => {
+    // These tests use a simplified "rag" mock with intentional drift — the
+    // warnings they produce are expected and do not indicate a real template issue.
     function makeTemplate(templateText: string, variables: string[]) {
       return {
         id: '1',

@@ -653,7 +653,8 @@ No markdown fences. No commentary outside the JSON.`,
   {
     name: 'document-analysis-proposition',
     category: 'document_analysis',
-    description: 'Ballot proposition quick-metadata extraction. Use for lightweight listing-page data. For the full detail-page analysis with citations and section anchors, use document-analysis-proposition-analysis.',
+    description:
+      'Ballot proposition quick-metadata extraction. Use for lightweight listing-page data. For the full detail-page analysis with citations and section anchors, use document-analysis-proposition-analysis.',
     variables: ['TEXT'],
     templateText: `You are a nonpartisan civic analyst. Analyze this ballot proposition.
 
@@ -888,15 +889,16 @@ Respond with JSON:
   {
     name: 'rag',
     category: 'rag',
-    description: 'RAG answer generation prompt',
+    description:
+      'RAG answer generation prompt — returns JSON { answer, sourcedFrom }',
     variables: ['CONTEXT', 'QUERY'],
-    templateText: `You are a helpful assistant that answers questions based only on the provided context.
+    templateText: `You are a nonpartisan civic assistant for Opus Populi. Answer questions about civic topics based only on the provided context. Stay neutral — do not advocate for or against any position, measure, or candidate.
 
 Instructions:
 - Answer the question using ONLY information from the context below
-- Be concise and direct - avoid unnecessary repetition
+- Be concise and direct — avoid unnecessary repetition
 - If listing items, list each item exactly once
-- If the context doesn't contain enough information, say so
+- If the context doesn't contain enough information to answer, use the prescribed fallback below
 - Do not make up information not present in the context
 
 Context:
@@ -904,7 +906,17 @@ Context:
 
 Question: {{QUERY}}
 
-Answer:`,
+Respond with ONLY valid JSON (no markdown, no preamble):
+{
+  "answer": "Your answer here, based only on the context above.",
+  "sourcedFrom": ["Brief description of which context passage(s) supported this answer"]
+}
+
+If the context doesn't contain enough information, respond with:
+{
+  "answer": "Based on available information, I can't fully answer that. For authoritative information, check the official source directly.",
+  "sourcedFrom": []
+}`,
   },
 
   // ============================================
