@@ -54,6 +54,7 @@ The client implements a 3-tier fallback so nodes degrade gracefully if this serv
 | `rag` | Retrieval-augmented generation (citizen Q&A) |
 | `civics_extraction` | Structured civic-process data extraction (`CivicsBlock` — chambers, measure types, lifecycle stages, glossary) |
 | `bill_extraction` | Legislative bill and vote record extraction |
+| `bill_votes_extraction` | Chamber-level roll-call vote records (per-member positions) from a bill votes page |
 
 Template names follow the pattern `{category}-{document-type}` or just `{category}` for single-template categories, e.g. `document-analysis-petition`, `civics-extraction`, `bill-extraction`, `bill-votes-extraction`.
 
@@ -85,11 +86,11 @@ Registered nodes authenticate with **HMAC-SHA256** request signing:
 
 Requests expire after 5 minutes (replay protection). The `@opuspopuli/prompt-client` handles signing automatically when `hmacNodeId` is configured.
 
-Admin endpoints use a separate `ADMIN_API_KEY` (Bearer token). Never expose the admin key to nodes.
+Admin endpoints use a separate `ADMIN_API_KEYS` env var (comma-separated Bearer tokens). Never expose the admin key to nodes.
 
 ## A/B experiments
 
-Experiments in the `experiments` table test prompt variants against a control. The `ExperimentsModule` handles bucketing deterministically by node ID. When adding a new template variant, create the experiment via the admin API — do not manually edit the DB.
+Experiments in the `experiments` table test prompt variants against a control. The `ExperimentsModule` handles bucketing deterministically by API key (SHA-256 of `apiKey + experimentId` mod 100). Note: key rotation reassigns a node's bucket — keep this in mind when designing long-running experiments. When adding a new template variant, create the experiment via the admin API — do not manually edit the DB.
 
 ## IP boundary
 

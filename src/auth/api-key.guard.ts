@@ -111,6 +111,11 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
       return true;
     }
 
+    this.logger.warn({
+      event: 'auth_failed',
+      method: 'bearer',
+      reason: 'invalid_or_expired_key',
+    });
     throw new UnauthorizedException('Invalid API key');
   }
 
@@ -179,6 +184,12 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
       .digest('base64');
 
     if (!safeCompare(expectedSignature, signature)) {
+      this.logger.warn({
+        event: 'auth_failed',
+        method: 'hmac',
+        reason: 'signature_mismatch',
+        keyId,
+      });
       throw new UnauthorizedException('Invalid HMAC signature');
     }
 

@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `http://localhost:3200` (development) or configured deployment URL.
+Base URL: `http://localhost:3210` (development) or configured deployment URL.
 
 Interactive Swagger UI available at `/api`.
 
@@ -100,6 +100,8 @@ Admin endpoints (`/admin/*`) use a separate set of API keys configured via the `
 Authorization: Bearer <ADMIN_API_KEY>
 ```
 
+Every response includes an `X-Correlation-Id` response header (HTTP headers are case-insensitive; the service emits lowercase `x-correlation-id`). Pass this ID when reporting issues — it ties all log lines for a request together.
+
 ## Rate Limits
 
 | Scope | Limit | Window |
@@ -116,23 +118,54 @@ When exceeded, returns `429 Too Many Requests`.
 
 Health check endpoint. No authentication required.
 
-### Response
+### Response (healthy — HTTP 200)
 
 ```json
 {
   "status": "ok",
   "timestamp": "2025-02-25T12:00:00.000Z",
   "database": "connected",
-  "activeTemplates": 21
+  "activeTemplates": 21,
+  "auditLogFailures": 0
+}
+```
+
+### Response (degraded — HTTP 503)
+
+```json
+{
+  "status": "error",
+  "timestamp": "2025-02-25T12:00:00.000Z",
+  "database": "disconnected",
+  "detail": "Can't reach database server at ...",
+  "auditLogFailures": 0
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `status` | `"ok"` \| `"degraded"` | `"degraded"` when database is unreachable |
+| `status` | `"ok"` \| `"error"` | `"error"` when database is unreachable |
 | `timestamp` | string | ISO 8601 timestamp |
 | `database` | `"connected"` \| `"disconnected"` | Database connectivity |
-| `activeTemplates` | number | Count of active templates (0 if DB is down) |
+| `activeTemplates` | number | Count of active templates; present only when healthy |
+| `detail` | string | First line of DB error message; present only when degraded |
+| `auditLogFailures` | number | Audit log write failures since last restart (non-zero = investigate) |
+
+---
+
+## `GET /metrics`
+
+Prometheus metrics endpoint. No authentication required (private network only — not exposed publicly).
+
+Scraped by Prometheus at the configured scrape interval. Key metrics:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `prompt_service_requests_total` | Counter | `endpoint`, `method`, `status` | Total HTTP requests processed |
+| `prompt_service_request_duration_seconds` | Histogram | `endpoint`, `method` | Request duration in seconds |
+| `process_*`, `nodejs_*` | Various | — | Default Node.js + process metrics |
+
+Path parameters are normalised to avoid high cardinality (e.g., `/prompts/:name/hash` rather than the literal template name; UUIDs replaced with `:id`).
 
 ---
 
