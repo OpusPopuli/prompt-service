@@ -29,6 +29,7 @@ services:
       API_KEYS: ca:test-api-key-1,tx:test-api-key-2
       ADMIN_API_KEYS: admin-test-key-1
       PROMPT_TTL_SECONDS: 300
+      HMAC_TIMESTAMP_TOLERANCE_SECONDS: 300
       PORT: 3200
     depends_on:
       opuspopuli-prompts-db-test:

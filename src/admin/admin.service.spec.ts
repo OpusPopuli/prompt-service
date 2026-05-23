@@ -415,6 +415,67 @@ describe('AdminService', () => {
     });
   });
 
+  describe('listExperiments', () => {
+    it('returns experiments ordered by createdAt desc with variants and template', async () => {
+      const experiments = [
+        {
+          id: 'exp-2',
+          name: 'b',
+          createdAt: new Date('2026-02-01'),
+          variants: [],
+          template: {},
+        },
+        {
+          id: 'exp-1',
+          name: 'a',
+          createdAt: new Date('2026-01-01'),
+          variants: [],
+          template: {},
+        },
+      ];
+      prisma.experiment.findMany.mockResolvedValue(experiments);
+
+      const result = await service.listExperiments();
+
+      expect(prisma.experiment.findMany).toHaveBeenCalledWith({
+        include: { variants: true, template: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result).toEqual(experiments);
+    });
+  });
+
+  describe('getExperiment', () => {
+    it('returns experiment with variants and version entries', async () => {
+      const experiment = {
+        id: 'exp-1',
+        name: 'test-exp',
+        variants: [{ id: 'v1', versionEntry: { id: 'vh1' } }],
+        template: { id: 't1' },
+      };
+      prisma.experiment.findUnique.mockResolvedValue(experiment);
+
+      const result = await service.getExperiment('exp-1');
+
+      expect(prisma.experiment.findUnique).toHaveBeenCalledWith({
+        where: { id: 'exp-1' },
+        include: {
+          variants: { include: { versionEntry: true } },
+          template: true,
+        },
+      });
+      expect(result).toEqual(experiment);
+    });
+
+    it('throws NotFoundException when experiment does not exist', async () => {
+      prisma.experiment.findUnique.mockResolvedValue(null);
+
+      await expect(service.getExperiment('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('activateExperiment', () => {
     it('should reject if experiment not in draft status', async () => {
       prisma.experiment.findUnique.mockResolvedValue({
