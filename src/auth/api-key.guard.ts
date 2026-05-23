@@ -12,19 +12,22 @@ import { PrismaService } from '../common/prisma.service';
 import { VaultService } from '../common/vault.service';
 import { safeCompare } from '../common/crypto.utils';
 
-/** Maximum allowed clock skew for HMAC timestamps (5 minutes). */
-const HMAC_TIMESTAMP_TOLERANCE_SECONDS = 300;
-
 @Injectable()
 export class ApiKeyGuard implements CanActivate, OnModuleInit {
   private readonly logger = new Logger(ApiKeyGuard.name);
   private readonly keyToRegion: Map<string, string>;
+  private readonly hmacToleranceSeconds: number;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly vault: VaultService,
   ) {
+    this.hmacToleranceSeconds = this.config.get<number>(
+      'HMAC_TIMESTAMP_TOLERANCE_SECONDS',
+      300,
+    );
+
     // Initialize from env var as fallback (always available)
     const keys = this.config.get<string>('API_KEYS', '');
     this.keyToRegion = new Map(
@@ -136,7 +139,7 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    if (Math.abs(now - requestTime) > HMAC_TIMESTAMP_TOLERANCE_SECONDS) {
+    if (Math.abs(now - requestTime) > this.hmacToleranceSeconds) {
       throw new UnauthorizedException('HMAC timestamp expired');
     }
 

@@ -70,13 +70,33 @@ pnpm start:dev
 
 ```bash
 # Health check (no auth required)
-curl http://localhost:3200/health
+curl http://localhost:3210/health
 
-# Fetch a prompt (requires API key)
-curl -X POST http://localhost:3200/prompts/document-analysis \
+# Fetch a prompt with a Bearer token (region/env-var key)
+curl -X POST http://localhost:3210/prompts/document-analysis \
   -H "Authorization: Bearer dev-key-1" \
   -H "Content-Type: application/json" \
   -d '{"documentType": "petition", "text": "We the people request..."}'
+
+# Fetch a prompt with HMAC signing (registered node — Node.js example)
+node -e "
+const { createHash, createHmac } = require('crypto');
+const body = JSON.stringify({ documentType: 'petition', text: 'We the people request...' });
+const ts = Math.floor(Date.now() / 1000).toString();
+const bodyHash = createHash('sha256').update(body).digest('hex');
+const sig = createHmac('sha256', process.env.NODE_API_KEY)
+  .update(ts + '\nPOST\n/prompts/document-analysis\n' + bodyHash)
+  .digest('base64');
+require('child_process').execSync(
+  \`curl -s -X POST http://localhost:3210/prompts/document-analysis \
+  -H 'Content-Type: application/json' \
+  -H 'X-HMAC-Timestamp: \${ts}' \
+  -H 'X-HMAC-Key-Id: \${process.env.NODE_ID}' \
+  -H 'X-HMAC-Signature: \${sig}' \
+  -d '\${body}'\`,
+  { stdio: 'inherit' }
+);
+" NODE_API_KEY=<node-api-key> NODE_ID=<node-uuid>
 ```
 
 ## API Endpoints

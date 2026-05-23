@@ -213,6 +213,32 @@ In the federated Opus Populi network:
 | Insider threat (rogue prompt edit) | Version history with full diff trail; no delete capability |
 | LLM output manipulation | Canary system compares outputs across nodes (planned, see Issue #429) |
 
+## Operational Assumptions
+
+### HMAC Clock Skew
+
+HMAC replay protection compares the `X-HMAC-Timestamp` header against server time. Requests whose timestamp falls outside the tolerance window are rejected with `401 HMAC timestamp expired`.
+
+| Parameter | Default | Env var |
+|---|---|---|
+| Tolerance window | ±300 s (5 min) | `HMAC_TIMESTAMP_TOLERANCE_SECONDS` |
+
+**Assumption**: Node system clocks are synchronized to within the tolerance window. All production nodes should run NTP (or equivalent) to keep drift well below 5 minutes.
+
+**If a node's clock drifts beyond tolerance**:
+- Every HMAC-signed request from that node will return `401 HMAC timestamp expired`
+- Bearer-token auth is not affected by clock drift and can be used as a fallback while the clock is corrected
+- The operator should fix NTP sync on the node and optionally increase `HMAC_TIMESTAMP_TOLERANCE_SECONDS` temporarily as a bridge measure
+
+**Replay window**: An attacker who captures a valid HMAC request can replay it within the tolerance window. The body hash in the signature string (`SHA-256(rawBody)`) means the attacker cannot modify the payload, limiting replay damage to duplicate reads of the same prompt template.
+
+### Node Certification Expiry
+
+Certified nodes have a `certificationExpiresAt` timestamp (default: 365 days from certification). After expiry:
+- HMAC and Bearer token requests from that node return `401 Node is not certified`
+- The admin must run `/admin/nodes/:id/recertify` to restore access
+- Certification expiry does **not** invalidate or rotate the node's API key
+
 ## Known Limitations
 
 1. **No mutual TLS**: Node-to-service communication uses Bearer tokens over HTTPS, not mTLS. This is acceptable for the current deployment model (internal Docker network) but should be revisited for multi-host federation.

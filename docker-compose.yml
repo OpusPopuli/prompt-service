@@ -40,6 +40,7 @@ services:
       API_KEYS: dev-key-1,dev-key-2
       ADMIN_API_KEYS: admin-dev-key-1
       PROMPT_TTL_SECONDS: 3600
+      HMAC_TIMESTAMP_TOLERANCE_SECONDS: 300
       PORT: 3210
     depends_on:
       opuspopuli-prompts-db:
