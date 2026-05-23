@@ -30,4 +30,4 @@ COPY --from=builder /app/prisma ./prisma
 COPY package.json ./
 
 EXPOSE 3200
-CMD ["sh", "-c", "pnpm db:migrate:deploy && node dist/seed/seed.js && node dist/main"]
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/seed/seed.js && node dist/main"]
