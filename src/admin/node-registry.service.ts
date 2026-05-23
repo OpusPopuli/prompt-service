@@ -85,11 +85,20 @@ export class NodeRegistryService {
         data: { apiKeySecretId: secretId },
       });
     } catch (error) {
-      this.logger.warn(
-        `Failed to store API key in Vault for node ${node.id}: ${error}`,
-      );
+      this.logger.warn({
+        event: 'vault_write_failed',
+        action: 'store_api_key',
+        nodeId: node.id,
+        error: (error as Error).message,
+      });
     }
 
+    this.logger.log({
+      event: 'node_registered',
+      nodeId: node.id,
+      region: node.region,
+      performedBy: adminKeyPrefix,
+    });
     return node;
   }
 
@@ -153,6 +162,11 @@ export class NodeRegistryService {
         },
       });
 
+      this.logger.log({
+        event: 'node_certified',
+        nodeId: id,
+        performedBy: adminKeyPrefix,
+      });
       return updated;
     });
   }
@@ -182,6 +196,11 @@ export class NodeRegistryService {
         },
       });
 
+      this.logger.log({
+        event: 'node_decertified',
+        nodeId: id,
+        performedBy: adminKeyPrefix,
+      });
       return updated;
     });
   }
@@ -209,6 +228,11 @@ export class NodeRegistryService {
         },
       });
 
+      this.logger.log({
+        event: 'node_recertified',
+        nodeId: id,
+        performedBy: adminKeyPrefix,
+      });
       return updated;
     });
   }
@@ -254,11 +278,19 @@ export class NodeRegistryService {
         data: { apiKeySecretId: secretId },
       });
     } catch (error) {
-      this.logger.warn(
-        `Failed to update Vault for key rotation on node ${id}: ${error}`,
-      );
+      this.logger.warn({
+        event: 'vault_write_failed',
+        action: 'rotate_api_key',
+        nodeId: id,
+        error: (error as Error).message,
+      });
     }
 
+    this.logger.log({
+      event: 'node_key_rotated',
+      nodeId: id,
+      performedBy: adminKeyPrefix,
+    });
     return node;
   }
 
@@ -272,9 +304,12 @@ export class NodeRegistryService {
       try {
         await this.vault.deleteSecret(node.apiKeySecretId);
       } catch (error) {
-        this.logger.warn(
-          `Failed to delete Vault secret for node ${id}: ${error}`,
-        );
+        this.logger.warn({
+          event: 'vault_write_failed',
+          action: 'delete_secret',
+          nodeId: id,
+          error: (error as Error).message,
+        });
       }
     }
 

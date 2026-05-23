@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../common/prisma.service';
 
@@ -22,6 +22,8 @@ interface VariantWithVersion {
 
 @Injectable()
 export class ExperimentsService {
+  private readonly logger = new Logger(ExperimentsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async resolveExperiment(
@@ -50,6 +52,14 @@ export class ExperimentsService {
       experiment.id,
       experiment.variants,
     );
+
+    this.logger.log({
+      event: 'experiment_variant_assigned',
+      templateName,
+      experimentId: experiment.id,
+      variantName: variant.name,
+      apiKeyPrefix: apiKey.slice(0, 8) + '...',
+    });
 
     return {
       templateText: variant.versionEntry.templateText,

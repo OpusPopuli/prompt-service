@@ -4,10 +4,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { StructuredLoggerService } from './common/structured-logger.service';
 
 async function bootstrap() {
+  const logger = new StructuredLoggerService('Bootstrap');
+  // Passing logger here tells NestJS to route all Logger instances (including
+  // `new Logger(ClassName)` used in services) through StructuredLoggerService,
+  // so every log line picks up correlation IDs from the ALS store.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
+    logger,
   });
 
   // Bump body-parser limit. Default is 100KB; the civics-extraction
@@ -37,8 +43,8 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3200);
 
   await app.listen(port);
-  console.log(`Prompt Service running on port ${port}`);
-  console.log(`Swagger docs at http://localhost:${port}/api`);
+  logger.log(`Prompt Service running on port ${port}`);
+  logger.log(`Swagger docs at http://localhost:${port}/api`);
 }
 
 bootstrap();
