@@ -70,13 +70,27 @@ pnpm start:dev
 
 ```bash
 # Health check (no auth required)
-curl http://localhost:3200/health
+curl http://localhost:3210/health
 
-# Fetch a prompt (requires API key)
-curl -X POST http://localhost:3200/prompts/document-analysis \
+# Fetch a prompt with a Bearer token (region/env-var key)
+curl -X POST http://localhost:3210/prompts/document-analysis \
   -H "Authorization: Bearer dev-key-1" \
   -H "Content-Type: application/json" \
   -d '{"documentType": "petition", "text": "We the people request..."}'
+
+# Fetch a prompt with HMAC signing (registered node)
+BODY='{"documentType":"petition","text":"We the people request..."}'
+TS=$(date +%s)
+BODY_HASH=$(echo -n "$BODY" | openssl dgst -sha256 -hex | awk '{print $2}')
+SIG=$(printf '%s\nPOST\n/prompts/document-analysis\n%s' "$TS" "$BODY_HASH" \
+  | openssl dgst -sha256 -hmac "$NODE_API_KEY" -binary | base64)
+curl -s -X POST http://localhost:3210/prompts/document-analysis \
+  -H "Content-Type: application/json" \
+  -H "X-HMAC-Timestamp: $TS" \
+  -H "X-HMAC-Key-Id: $NODE_ID" \
+  -H "X-HMAC-Signature: $SIG" \
+  -d "$BODY"
+# NODE_API_KEY=<node-api-key> NODE_ID=<node-uuid>
 ```
 
 ## API Endpoints

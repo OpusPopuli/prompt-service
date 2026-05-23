@@ -12,6 +12,23 @@ function createMockPrisma() {
   };
 }
 
+function createMockConfig(
+  apiKeys: string,
+  hmacToleranceSeconds?: string,
+): ConfigService {
+  return {
+    get: jest.fn().mockImplementation((key: string, defaultValue?: unknown) => {
+      if (key === 'API_KEYS') return apiKeys;
+      if (
+        key === 'HMAC_TIMESTAMP_TOLERANCE_SECONDS' &&
+        hmacToleranceSeconds !== undefined
+      )
+        return hmacToleranceSeconds;
+      return defaultValue;
+    }),
+  } as unknown as ConfigService;
+}
+
 function createMockVault() {
   return {
     getSecretsByPrefix: jest.fn().mockResolvedValue([]),
@@ -82,13 +99,10 @@ describe('ApiKeyGuard', () => {
   let mockVault: ReturnType<typeof createMockVault>;
 
   beforeEach(() => {
-    const configService = {
-      get: jest.fn().mockReturnValue('ca:key-1,tx:key-2,ny:key-3'),
-    } as unknown as ConfigService;
     mockPrisma = createMockPrisma();
     mockVault = createMockVault();
     guard = new ApiKeyGuard(
-      configService,
+      createMockConfig('ca:key-1,tx:key-2,ny:key-3'),
       mockPrisma as never,
       mockVault as never,
     );
@@ -132,11 +146,8 @@ describe('ApiKeyGuard', () => {
   });
 
   it('should handle empty API_KEYS config gracefully', async () => {
-    const configService = {
-      get: jest.fn().mockReturnValue(''),
-    } as unknown as ConfigService;
     const emptyGuard = new ApiKeyGuard(
-      configService,
+      createMockConfig(''),
       createMockPrisma() as never,
       createMockVault() as never,
     );
@@ -148,11 +159,8 @@ describe('ApiKeyGuard', () => {
   });
 
   it('should handle API_KEYS with multiple colons (key contains colon)', async () => {
-    const configService = {
-      get: jest.fn().mockReturnValue('ca:key:with:colons'),
-    } as unknown as ConfigService;
     const colonGuard = new ApiKeyGuard(
-      configService,
+      createMockConfig('ca:key:with:colons'),
       createMockPrisma() as never,
       createMockVault() as never,
     );
@@ -165,11 +173,8 @@ describe('ApiKeyGuard', () => {
   });
 
   it('should default to unknown region when no colon in key entry', async () => {
-    const configService = {
-      get: jest.fn().mockReturnValue('legacy-key'),
-    } as unknown as ConfigService;
     const legacyGuard = new ApiKeyGuard(
-      configService,
+      createMockConfig('legacy-key'),
       createMockPrisma() as never,
       createMockVault() as never,
     );
@@ -342,6 +347,28 @@ describe('ApiKeyGuard', () => {
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         'HMAC timestamp expired',
       );
+    });
+
+    it('should accept timestamp within a custom tolerance window', async () => {
+      // Guard configured with 700s tolerance — a 600s-old timestamp is within
+      // the window and must be accepted (the default 300s guard would reject it).
+      const wideGuard = new ApiKeyGuard(
+        createMockConfig('ca:key-1,tx:key-2,ny:key-3', '700'),
+        mockPrisma as never,
+        mockVault as never,
+      );
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const oldTimestamp = (Math.floor(Date.now() / 1000) - 600).toString();
+      const { ctx } = createHmacContext(
+        apiKey,
+        nodeId,
+        '{"test":"body"}',
+        oldTimestamp,
+      );
+
+      await expect(wideGuard.canActivate(ctx)).resolves.toBe(true);
     });
 
     it('should reject future timestamp beyond window', async () => {

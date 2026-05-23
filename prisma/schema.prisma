@@ -98,6 +98,8 @@ model Node {
   id                     String    @id @default(uuid())
   name                   String    @unique
   region                 String
+  /// Reserved for future node-to-service signature verification (planned follow-on to HMAC auth).
+  /// Accepted on register/update but not currently read by any service code. Do not remove.
   publicKey              String?   @map("public_key")
   apiKey                 String    @unique @map("api_key")
   apiKeyHash             String?   @map("api_key_hash")
