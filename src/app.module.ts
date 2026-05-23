@@ -1,11 +1,13 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma.module';
+import { CorrelationMiddleware } from './common/correlation.middleware';
 import { HealthModule } from './health/health.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { AdminModule } from './admin/admin.module';
 import { ExperimentsModule } from './experiments/experiments.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -16,6 +18,11 @@ import { ExperimentsModule } from './experiments/experiments.module';
     PromptsModule,
     AdminModule,
     ExperimentsModule,
+    MetricsModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationMiddleware).forRoutes('*');
+  }
+}

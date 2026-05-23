@@ -44,6 +44,9 @@ AppModule
 ├── ThrottlerModule (global)        # Rate limiting: 60 req/min default
 ├── PrismaModule (global)           # Database connection lifecycle
 ├── ExperimentsModule (global)      # A/B testing bucketing engine
+├── MetricsModule                   # Prometheus metrics + HTTP interceptor
+│   └── HttpMetricsInterceptor      # APP_INTERCEPTOR — records latency + counts per endpoint
+├── CorrelationMiddleware           # Generates/propagates correlationId for every request
 ├── HealthModule                    # GET /health
 ├── PromptsModule                   # Prompt serving endpoints
 │   ├── PromptsController           # Route handlers + node API key guards
@@ -51,6 +54,8 @@ AppModule
 └── AdminModule                     # Template & experiment management
     ├── AdminController             # CRUD for templates (admin key auth)
     ├── ExperimentsAdminController  # Experiment lifecycle (admin key auth)
+    ├── NodeRegistryController      # Node lifecycle: register, certify, decertify, rotate key
+    ├── NodeRegistryService         # Node CRUD + Vault key storage
     └── AdminService                # Template CRUD, rollback, experiment management
 ```
 
@@ -64,7 +69,7 @@ Primary storage for prompt templates. Each template has a unique name and belong
 |--------|------|-------------|
 | `id` | UUID | Primary key |
 | `name` | String (unique) | Template identifier (e.g., `document-analysis-petition`) |
-| `category` | String | `structural_analysis`, `document_analysis`, `rag`, `civics_extraction`, or `bill_extraction` |
+| `category` | String | `structural_analysis`, `document_analysis`, `rag`, `civics_extraction`, `bill_extraction`, or `bill_votes_extraction` |
 | `description` | String | Human-readable purpose |
 | `template_text` | Text | Template with `{{VARIABLE}}` placeholders |
 | `variables` | String[] | List of expected variable names |
@@ -114,6 +119,39 @@ Variant definitions within an experiment. Traffic percentages must sum to 100.
 | `version_id` | UUID | FK to `prompt_version_history` — which template version to serve |
 | `traffic_pct` | Int | Traffic percentage (0-100) |
 
+### `nodes`
+
+Registered client nodes that authenticate via HMAC or Bearer token.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key (also used as `X-HMAC-Key-Id`) |
+| `name` | String | Human-readable node name |
+| `region` | String | Region identifier (attached to all prompt requests from this node) |
+| `public_key` | String? | Optional public key for future asymmetric auth |
+| `api_key` | String | Plaintext API key (also stored in Vault) |
+| `api_key_hash` | String | SHA-256 hash used for fast Bearer token lookups |
+| `api_key_secret_id` | String? | Vault secret ID for the plaintext key (used in HMAC path) |
+| `status` | String | `pending`, `certified`, or `decertified` |
+| `certified_at` | Timestamptz? | When the node was last certified |
+| `certification_expires_at` | Timestamptz? | Certification expiry — node is blocked after this |
+| `decertified_at` | Timestamptz? | When the node was decertified |
+| `created_at` | Timestamptz | Registration timestamp |
+| `updated_at` | Timestamptz | Last modification timestamp |
+
+### `node_audit_logs`
+
+Immutable record of every node state change (certification, decertification, key rotation).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `node_id` | UUID | FK to `nodes` |
+| `action` | String | `registered`, `certified`, `decertified`, `recertified`, `key_rotated` |
+| `reason` | String? | Admin-provided reason |
+| `performed_by` | String | First 8 chars of the admin key used to perform the action |
+| `created_at` | Timestamptz | When the action occurred |
+
 ### `prompt_request_logs`
 
 Analytics table tracking prompt usage, including A/B experiment participation.
@@ -138,8 +176,14 @@ Analytics table tracking prompt usage, including A/B experiment participation.
    Headers: Authorization: Bearer <API_KEY>
    Body: { documentType: "petition", text: "..." }
 
+1a. CorrelationMiddleware: reads X-Correlation-Id header or generates a UUID.
+    Stores in AsyncLocalStorage so all log lines for this request share the ID.
+    Echoes X-Correlation-Id in the response.
+
+1b. HttpMetricsInterceptor: records start time; increments counter + histogram on completion.
+
 2. ApiKeyGuard validates Bearer token against API_KEYS env var
-   → 401 if invalid
+   → 401 if invalid (logs structured auth_failed event)
 
 3. ThrottlerGuard checks rate limit (30 req/min for prompt endpoints)
    → 429 if exceeded
@@ -253,6 +297,40 @@ draft → active → stopped
 - **Only primary templates are A/B tested**: Auxiliary templates (schema descriptions, base instructions) always use the default version. This keeps prompt composition predictable.
 - **Separate admin controller**: Experiment endpoints use `/admin/experiments` (not nested under `/admin/templates/:id`) to avoid route parameter conflicts.
 - **No auto-winner selection**: Experiments must be manually stopped and evaluated. Automatic winner selection is out of scope for the initial implementation.
+
+## Observability
+
+### Correlation IDs
+
+Every HTTP request gets a `correlationId` (UUID v4) generated by `CorrelationMiddleware` and stored in `AsyncLocalStorage`. All structured log lines produced during the request lifecycle include this ID. The ID is also echoed back to the caller as `X-Correlation-Id`.
+
+Pass an `X-Correlation-Id` header to propagate an existing ID (e.g., from an upstream service) instead of generating a new one.
+
+### Structured Logging
+
+`StructuredLoggerService` (the app-wide logger) outputs JSON in production and colourised pretty-print in development. Every line includes `{ timestamp, level, service, message, correlationId?, nodeId?, endpoint? }`.
+
+Key structured events emitted by the service (grepping by `event` field):
+
+| Event | Where | Fields |
+|-------|-------|--------|
+| `auth_failed` | `ApiKeyGuard` | `method` (bearer/hmac), `reason`, `keyId` (HMAC only) |
+| `vault_write_failed` | `NodeRegistryService` | `action`, `nodeId`, `error` |
+| `audit_log_write_failure` | `PromptsService` | `endpoint`, `region`, `apiKeyPrefix`, `cumulativeFailures`, `error` |
+| `node_registered` | `NodeRegistryService` | `nodeId`, `region`, `performedBy` |
+| `node_certified` / `node_decertified` / `node_recertified` / `node_key_rotated` | `NodeRegistryService` | `nodeId`, `performedBy` |
+| `experiment_variant_assigned` | `ExperimentsService` | `templateName`, `experimentId`, `variantName`, `apiKeyPrefix` |
+
+### Prometheus Metrics
+
+`MetricsModule` registers two custom metrics via `@willsoto/nestjs-prometheus`:
+
+- **`prompt_service_requests_total`** (Counter) — labels: `endpoint`, `method`, `status`
+- **`prompt_service_request_duration_seconds`** (Histogram) — labels: `endpoint`, `method`; buckets from 5ms to 5s
+
+`HttpMetricsInterceptor` is applied globally as `APP_INTERCEPTOR` and also stamps `endpoint` into the current request's correlation store so log lines carry it.
+
+`GET /metrics` is served by `PrometheusModule` without authentication (private Docker network only).
 
 Note: The `prompt-client` in the main repo has its own 3-tier fallback:
 1. Remote service (this service) → 2. Local database → 3. Hardcoded fallbacks
