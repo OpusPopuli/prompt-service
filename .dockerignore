@@ -36,6 +36,3 @@ scripts
 # Supabase init scripts (volume-mounted in compose, not used by Prisma migrations)
 supabase
 
-# Test files (unit tests only — test/ is needed by Dockerfile.test-runner)
-**/*.spec.ts
-**/*.e2e-spec.ts
