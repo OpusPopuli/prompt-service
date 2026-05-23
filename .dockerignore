@@ -1,6 +1,38 @@
+# Dependencies and build output
 node_modules
 dist
 coverage
+
+# Environment files
 .env
 .env.local
+.env.*.local
+
+# Version control and tooling
 .git
+.github
+.husky
+.claude
+.vscode
+
+# Linting, formatting, and code quality config
+.eslintrc*
+.prettierrc*
+.jscpd.json
+.gitleaks.toml
+
+# Documentation
+*.md
+docs
+
+# Docker files (not needed inside the image)
+Dockerfile*
+docker-compose*.yml
+
+# Dev and CI tooling
+postman
+scripts
+
+# Supabase init scripts (volume-mounted in compose, not used by Prisma migrations)
+supabase
+
