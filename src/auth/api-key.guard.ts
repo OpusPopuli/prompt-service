@@ -23,9 +23,9 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly vault: VaultService,
   ) {
-    this.hmacToleranceSeconds = this.config.get<number>(
-      'HMAC_TIMESTAMP_TOLERANCE_SECONDS',
-      300,
+    this.hmacToleranceSeconds = parseInt(
+      this.config.get('HMAC_TIMESTAMP_TOLERANCE_SECONDS', '300'),
+      10,
     );
 
     // Initialize from env var as fallback (always available)

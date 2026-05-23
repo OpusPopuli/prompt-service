@@ -230,7 +230,7 @@ HMAC replay protection compares the `X-HMAC-Timestamp` header against server tim
 - Bearer-token auth is not affected by clock drift and can be used as a fallback while the clock is corrected
 - The operator should fix NTP sync on the node and optionally increase `HMAC_TIMESTAMP_TOLERANCE_SECONDS` temporarily as a bridge measure
 
-**Replay window**: An attacker who captures a valid HMAC request can replay it within the tolerance window. The body hash in the signature string (`SHA-256(rawBody)`) means the attacker cannot modify the payload, limiting replay damage to duplicate reads of the same prompt template.
+**Replay window**: An attacker who captures a valid HMAC request can replay it within the tolerance window. The body hash in the signature string (`SHA-256(rawBody)`) means the attacker cannot modify the payload. HMAC is used on both prompt-serving and admin endpoints, so replay damage is limited to re-executing the same read or write operation with the same body — an attacker cannot change the payload to achieve a different effect.
 
 ### Node Certification Expiry
 

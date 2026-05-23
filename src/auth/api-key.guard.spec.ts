@@ -12,10 +12,18 @@ function createMockPrisma() {
   };
 }
 
-function createMockConfig(apiKeys: string): ConfigService {
+function createMockConfig(
+  apiKeys: string,
+  hmacToleranceSeconds?: string,
+): ConfigService {
   return {
     get: jest.fn().mockImplementation((key: string, defaultValue?: unknown) => {
       if (key === 'API_KEYS') return apiKeys;
+      if (
+        key === 'HMAC_TIMESTAMP_TOLERANCE_SECONDS' &&
+        hmacToleranceSeconds !== undefined
+      )
+        return hmacToleranceSeconds;
       return defaultValue;
     }),
   } as unknown as ConfigService;
@@ -339,6 +347,28 @@ describe('ApiKeyGuard', () => {
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         'HMAC timestamp expired',
       );
+    });
+
+    it('should accept timestamp within a custom tolerance window', async () => {
+      // Guard configured with 700s tolerance — a 600s-old timestamp is within
+      // the window and must be accepted (the default 300s guard would reject it).
+      const wideGuard = new ApiKeyGuard(
+        createMockConfig('ca:key-1,tx:key-2,ny:key-3', '700'),
+        mockPrisma as never,
+        mockVault as never,
+      );
+      mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+      mockVault.getSecret.mockResolvedValue(apiKey);
+
+      const oldTimestamp = (Math.floor(Date.now() / 1000) - 600).toString();
+      const { ctx } = createHmacContext(
+        apiKey,
+        nodeId,
+        '{"test":"body"}',
+        oldTimestamp,
+      );
+
+      await expect(wideGuard.canActivate(ctx)).resolves.toBe(true);
     });
 
     it('should reject future timestamp beyond window', async () => {

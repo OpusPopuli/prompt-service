@@ -34,3 +34,7 @@ CREATE CONSTRAINT TRIGGER experiment_traffic_pct_check
   AFTER INSERT OR UPDATE ON experiment_variants
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION check_experiment_traffic_pct();
+
+-- Rollback:
+-- DROP TRIGGER IF EXISTS experiment_traffic_pct_check ON experiment_variants;
+-- DROP FUNCTION IF EXISTS check_experiment_traffic_pct();
