@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PromptsController } from './prompts.controller';
 import { PromptsService } from './prompts.service';
+import { NodeThrottlerGuard } from '../auth/node-throttler.guard';
 import { PrismaService } from '../common/prisma.service';
 import { VaultService } from '../common/vault.service';
 
@@ -11,8 +13,10 @@ describe('PromptsController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }])],
       controllers: [PromptsController],
       providers: [
+        NodeThrottlerGuard,
         {
           provide: PromptsService,
           useValue: {
