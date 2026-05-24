@@ -16,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ApiKeyGuard } from '../auth/api-key.guard';
+import { NodeThrottlerGuard } from '../auth/node-throttler.guard';
 import { PromptsService } from './prompts.service';
 import { StructuralAnalysisDto } from './dto/structural-analysis.dto';
 import { DocumentAnalysisDto } from './dto/document-analysis.dto';
@@ -42,12 +43,14 @@ function ApiPromptResponses() {
 
 @ApiTags('prompts')
 @Controller('prompts')
+// ApiKeyGuard must come before NodeThrottlerGuard so req.nodeId / req.apiKey
+// are populated before the per-node bucket key is resolved.
+@UseGuards(ApiKeyGuard, NodeThrottlerGuard)
+@ApiBearerAuth()
 export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}
 
   @Post('structural-analysis')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get structural analysis prompt' })
   @ApiPromptResponses()
@@ -63,8 +66,6 @@ export class PromptsController {
   }
 
   @Post('document-analysis')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get document analysis prompt' })
   @ApiPromptResponses()
@@ -80,8 +81,6 @@ export class PromptsController {
   }
 
   @Post('rag')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({ summary: 'Get RAG prompt' })
   @ApiPromptResponses()
@@ -93,8 +92,6 @@ export class PromptsController {
   }
 
   @Post('civics-extraction')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({
     summary:
@@ -113,8 +110,6 @@ export class PromptsController {
   }
 
   @Post('bill-extraction')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({
     summary:
@@ -133,8 +128,6 @@ export class PromptsController {
   }
 
   @Post('bill-votes-extraction')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({
     summary:
@@ -153,8 +146,6 @@ export class PromptsController {
   }
 
   @Post('verify')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify a prompt hash is authentic' })
   @ApiResponse({ status: 200, description: 'Verification result' })
   @ApiResponse({ status: 401, description: INVALID_API_KEY })
@@ -169,8 +160,10 @@ export class PromptsController {
    * truth for manifest cache invalidation.
    */
   @Get(':name/hash')
-  @UseGuards(ApiKeyGuard)
-  @ApiBearerAuth()
+  // 120/min vs 30/min on composition endpoints: this endpoint is a DB lookup
+  // only (no interpolation, no experiment bucketing, no request log write).
+  // The 4x headroom reflects the real cost differential and allows clients to
+  // poll for cache invalidation without crowding out composition quota.
   @Throttle({ default: { ttl: 60_000, limit: 120 } })
   @ApiOperation({ summary: 'Get the hash of a named prompt template' })
   @ApiResponse({
