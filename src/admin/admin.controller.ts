@@ -15,6 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AdminKeyGuard } from '../auth/admin-key.guard';
 import { AdminService } from './admin.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
@@ -22,9 +23,20 @@ import { UpdateTemplateDto } from './dto/update-template.dto';
 import { ListTemplatesQueryDto } from './dto/list-templates.dto';
 import { RollbackTemplateDto } from './dto/rollback-template.dto';
 
+// 10/min default is tighter than the global 60/min. Admin endpoints mutate
+// templates and shouldn't see legitimate bursts above that — anything
+// higher is likely a brute-force probe against the admin key. Configurable
+// via ADMIN_THROTTLE_LIMIT for integration test environments that burst
+// admin requests across many sequential cases. See #58.
+const ADMIN_THROTTLE_LIMIT = Number.parseInt(
+  process.env.ADMIN_THROTTLE_LIMIT ?? '10',
+  10,
+);
+
 @ApiTags('admin')
 @Controller('admin/templates')
 @UseGuards(AdminKeyGuard)
+@Throttle({ default: { ttl: 60_000, limit: ADMIN_THROTTLE_LIMIT } })
 @ApiBearerAuth()
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

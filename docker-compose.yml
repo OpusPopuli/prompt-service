@@ -41,6 +41,9 @@ services:
       ADMIN_API_KEYS: admin-dev-key-1
       PROMPT_TTL_SECONDS: 3600
       HMAC_TIMESTAMP_TOLERANCE_SECONDS: 300
+      # Local dev: image runs NODE_ENV=production; opt-in to Swagger UI at /api
+      # for browsing the API surface during development.
+      ENABLE_SWAGGER: 'true'
       PORT: 3210
     depends_on:
       opuspopuli-prompts-db:
