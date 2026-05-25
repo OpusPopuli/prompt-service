@@ -60,6 +60,10 @@ export class AdminKeyGuard implements CanActivate, OnModuleInit {
     }
 
     request.adminKey = token;
+    // Centralized so controllers/services don't each slice the token
+    // independently (issue #61 finding 2). The masked prefix is what
+    // lands in audit logs as `performedBy`.
+    request.adminKeyPrefix = token.slice(0, 8) + '...';
     return true;
   }
 }

@@ -33,6 +33,23 @@ export interface PromptHashResult {
   promptVersion: string;
 }
 
+/**
+ * Raw template payload returned by `GET /prompts/:name` for client-side
+ * caching + local interpolation (issue #66). Includes everything a client
+ * needs to fill placeholders itself: text, variable list, hash, version,
+ * TTL, and A/B routing context.
+ */
+export interface PromptTemplateResponse {
+  name: string;
+  templateText: string;
+  variables: string[];
+  promptHash: string;
+  promptVersion: string;
+  expiresAt: string;
+  experimentId: string | null;
+  variantName: string | null;
+}
+
 interface ResolvedTemplate {
   templateText: string;
   version: number;
@@ -278,6 +295,56 @@ export class PromptsService implements OnModuleInit {
       name: template.name,
       promptHash: this.hash(template.templateText),
       promptVersion: `v${template.version}`,
+    };
+  }
+
+  /**
+   * Return the raw template payload for a named template — no interpolation.
+   *
+   * Designed for client-side caching (issue #66 + opuspopuli#729): the
+   * client holds the template + variables in memory for `expiresAt`, fills
+   * placeholders locally per call, and only re-fetches when the TTL passes
+   * or `/:name/hash` shows the cached hash is stale. Eliminates the per-call
+   * remote round-trip the prompt-client used to do per bill / per document.
+   *
+   * A/B experiments resolve server-side. The response carries
+   * experimentId/variantName so the caller can log the variant assignment
+   * for audit and analysis.
+   */
+  async getPromptTemplate(
+    name: string,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptTemplateResponse> {
+    // resolveTemplate handles A/B routing. For the variant path it returns
+    // the variant text but no `variables` (those live on the canonical
+    // template row, not on version_history). Look up the base template
+    // separately so the caller always has the variable list — without it
+    // they can't interpolate locally.
+    const resolved = await this.resolveTemplate(name, apiKey);
+    const baseTemplate = await this.prisma.promptTemplate.findFirst({
+      where: { name, isActive: true },
+      select: { variables: true },
+    });
+
+    await this.logRequest(
+      `${name}:template-fetch`,
+      resolved.version,
+      apiKey,
+      region,
+      resolved.experimentId,
+      resolved.variantName,
+    );
+
+    return {
+      name,
+      templateText: resolved.templateText,
+      variables: baseTemplate?.variables ?? resolved.variables ?? [],
+      promptHash: this.hash(resolved.templateText),
+      promptVersion: `v${resolved.version}`,
+      expiresAt: this.buildExpiresAt(),
+      experimentId: resolved.experimentId ?? null,
+      variantName: resolved.variantName ?? null,
     };
   }
 
@@ -539,15 +606,17 @@ export class PromptsService implements OnModuleInit {
     templateText: string;
     version: number;
   }): PromptServiceResponse {
-    const ttlSeconds = this.config.get<number>('PROMPT_TTL_SECONDS', 3600);
-    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
-
     return {
       promptText: '',
       promptHash: this.hash(template.templateText),
       promptVersion: `v${template.version}`,
-      expiresAt,
+      expiresAt: this.buildExpiresAt(),
     };
+  }
+
+  private buildExpiresAt(): string {
+    const ttlSeconds = this.config.get<number>('PROMPT_TTL_SECONDS', 3600);
+    return new Date(Date.now() + ttlSeconds * 1000).toISOString();
   }
 
   private async logRequest(

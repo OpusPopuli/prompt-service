@@ -64,6 +64,20 @@ describe('AdminKeyGuard', () => {
     expect(request.adminKey).toBe('admin-key-2');
   });
 
+  it('should attach adminKeyPrefix (8-char masked) to request on success', () => {
+    // Centralizes the prefix derivation so controllers don't slice the
+    // token independently — issue #61 finding 2.
+    const request: Record<string, unknown> = {
+      headers: { authorization: 'Bearer admin-key-2' },
+    };
+    const ctx = {
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+
+    guard.canActivate(ctx);
+    expect(request.adminKeyPrefix).toBe('admin-ke...');
+  });
+
   describe('Vault key loading', () => {
     it('should load admin keys from Vault on init', async () => {
       mockVault.getSecretsByPrefix.mockResolvedValue([

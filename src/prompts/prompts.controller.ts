@@ -29,6 +29,18 @@ import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
 
+// Per-route limit on prompt composition POSTs. 30/min default is generous
+// for a single legitimate node — comfortably above sustained scraping
+// cadence while bounding accidental loops. Configurable via
+// PROMPT_THROTTLE_LIMIT so integration test envs (which fire ~80 prompt
+// POSTs from a single container IP through a shared `default` throttler
+// bucket) can raise it without bypassing the production behavior tested
+// elsewhere. Mirrors ADMIN_THROTTLE_LIMIT and GLOBAL_THROTTLE_LIMIT.
+const PROMPT_THROTTLE_LIMIT = Number.parseInt(
+  process.env.PROMPT_THROTTLE_LIMIT ?? '30',
+  10,
+);
+
 function ApiPromptResponses() {
   return applyDecorators(
     ApiResponse({
@@ -51,7 +63,7 @@ export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}
 
   @Post('structural-analysis')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({ summary: 'Get structural analysis prompt' })
   @ApiPromptResponses()
   async structuralAnalysis(
@@ -66,7 +78,7 @@ export class PromptsController {
   }
 
   @Post('document-analysis')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({ summary: 'Get document analysis prompt' })
   @ApiPromptResponses()
   async documentAnalysis(
@@ -81,7 +93,7 @@ export class PromptsController {
   }
 
   @Post('rag')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({ summary: 'Get RAG prompt' })
   @ApiPromptResponses()
   async rag(
@@ -92,7 +104,7 @@ export class PromptsController {
   }
 
   @Post('civics-extraction')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({
     summary:
       'Get civics-extraction prompt. The LLM is instructed to emit a CivicsBlock with verbatim source text + plain-language rewrites for laypeople. See OpusPopuli/opuspopuli#669.',
@@ -110,7 +122,7 @@ export class PromptsController {
   }
 
   @Post('bill-extraction')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({
     summary:
       'Get bill-extraction prompt. The LLM is instructed to emit a structured Bill record from a single official legislature bill status page. See OpusPopuli/opuspopuli#686.',
@@ -128,7 +140,7 @@ export class PromptsController {
   }
 
   @Post('bill-votes-extraction')
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({
     summary:
       'Get bill-votes-extraction prompt. The LLM is instructed to emit structured chamber-level roll-call vote records (per-member positions) from a billVotesClient page. See OpusPopuli/opuspopuli#686.',
@@ -174,5 +186,36 @@ export class PromptsController {
   @ApiResponse({ status: 404, description: TEMPLATE_NOT_FOUND })
   async hash(@Param('name') name: string) {
     return this.promptsService.getPromptHash(name);
+  }
+
+  /**
+   * Return the raw template payload (text + variables + metadata) for
+   * client-side caching and local interpolation. Designed to let clients
+   * stop calling the per-call composition endpoints on every bill/document
+   * — fetch once, cache for `expiresAt`, interpolate locally. A/B variants
+   * resolve server-side. See issue #66 and opuspopuli#729.
+   */
+  @Get(':name')
+  // 120/min: same as /:name/hash since this is also a cache-warmer endpoint
+  // that healthy clients hit infrequently (once per template per TTL window,
+  // not once per call).
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @ApiOperation({
+    summary:
+      'Get the raw template payload for client-side caching + local interpolation',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Raw template + variables + hash + version + expiresAt + experiment context',
+  })
+  @ApiResponse({ status: 401, description: INVALID_API_KEY })
+  @ApiResponse({ status: 404, description: TEMPLATE_NOT_FOUND })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  async template(
+    @Param('name') name: string,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getPromptTemplate(name, req.apiKey, req.region);
   }
 }

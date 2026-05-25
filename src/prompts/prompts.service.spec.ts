@@ -435,6 +435,121 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getPromptTemplate (raw template fetch — issue #66)', () => {
+    it('returns raw template with variables, hash, version, and expiresAt', async () => {
+      const template = {
+        id: '1',
+        name: 'rag',
+        templateText: '{{CONTEXT}} {{QUERY}}',
+        version: 3,
+        isActive: true,
+        variables: ['CONTEXT', 'QUERY'],
+      };
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPromptTemplate('rag', 'k', 'ca');
+
+      expect(result.name).toBe('rag');
+      expect(result.templateText).toBe('{{CONTEXT}} {{QUERY}}');
+      expect(result.variables).toEqual(['CONTEXT', 'QUERY']);
+      expect(result.promptVersion).toBe('v3');
+      expect(result.promptHash).toBe(
+        createHash('sha256').update('{{CONTEXT}} {{QUERY}}').digest('hex'),
+      );
+      expect(result.expiresAt).toBeDefined();
+      expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
+      expect(result.experimentId).toBeNull();
+      expect(result.variantName).toBeNull();
+    });
+
+    it('logs the template-fetch audit entry with the per-template endpoint label', async () => {
+      const template = {
+        id: '1',
+        name: 'rag',
+        templateText: 't',
+        version: 1,
+        isActive: true,
+        variables: [],
+      };
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getPromptTemplate('rag', 'my-secret-key', 'tx');
+
+      expect(prisma.promptRequestLog.create).toHaveBeenCalledWith({
+        data: {
+          endpoint: 'rag:template-fetch',
+          promptVersion: 1,
+          apiKeyPrefix: 'my-secre...',
+          region: 'tx',
+          experimentId: null,
+          variantName: null,
+        },
+      });
+    });
+
+    it('returns the A/B variant text when an experiment is active', async () => {
+      const baseTemplate = {
+        id: '1',
+        name: 'rag',
+        templateText: 'control text',
+        version: 1,
+        isActive: true,
+        variables: ['CONTEXT'],
+      };
+      experiments.resolveExperiment.mockResolvedValue({
+        templateText: 'variant text',
+        version: 5,
+        templateHash: 'h',
+        experimentId: 'exp-1',
+        variantName: 'variant_a',
+      });
+      prisma.promptTemplate.findFirst.mockResolvedValue(baseTemplate);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPromptTemplate('rag', 'k', 'ca');
+
+      expect(result.templateText).toBe('variant text');
+      expect(result.promptVersion).toBe('v5');
+      // Variables come from the base template even when serving a variant —
+      // version_history doesn't carry them, but the client needs them to
+      // interpolate.
+      expect(result.variables).toEqual(['CONTEXT']);
+      expect(result.experimentId).toBe('exp-1');
+      expect(result.variantName).toBe('variant_a');
+    });
+
+    it('returns variant text and empty variables when base template is missing', async () => {
+      // Edge case: variant served but the canonical row was hard-deleted
+      // (or filter mismatch). Client gets an empty variable list rather
+      // than a 500.
+      experiments.resolveExperiment.mockResolvedValue({
+        templateText: 'variant text',
+        version: 2,
+        templateHash: 'h',
+        experimentId: 'exp-1',
+        variantName: 'control',
+      });
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPromptTemplate('rag', 'k', 'ca');
+
+      expect(result.templateText).toBe('variant text');
+      expect(result.variables).toEqual([]);
+    });
+
+    it('throws NotFoundException when template does not exist (no experiment, no row)', async () => {
+      experiments.resolveExperiment.mockResolvedValue(null);
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPromptTemplate('no-such-template', 'k', 'ca'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('verifyPrompt', () => {
     it('should return valid for a matching (hash, version) pair', async () => {
       const templateText = 'test template';
