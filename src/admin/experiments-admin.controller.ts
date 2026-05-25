@@ -5,13 +5,22 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AdminKeyGuard } from '../auth/admin-key.guard';
 import { AdminService } from './admin.service';
 import { CreateExperimentDto } from './dto/create-experiment.dto';
 
+// 10/min default — stricter than the global 60/min for admin actions.
+// Configurable via ADMIN_THROTTLE_LIMIT. See #58.
+const ADMIN_THROTTLE_LIMIT = Number.parseInt(
+  process.env.ADMIN_THROTTLE_LIMIT ?? '10',
+  10,
+);
+
 @ApiTags('admin - experiments')
 @Controller('admin/experiments')
 @UseGuards(AdminKeyGuard)
+@Throttle({ default: { ttl: 60_000, limit: ADMIN_THROTTLE_LIMIT } })
 @ApiBearerAuth()
 export class ExperimentsAdminController {
   constructor(private readonly adminService: AdminService) {}
