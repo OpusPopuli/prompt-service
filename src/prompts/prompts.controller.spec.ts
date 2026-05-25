@@ -28,6 +28,7 @@ describe('PromptsController', () => {
             getBillVotesExtractionPrompt: jest.fn(),
             verifyPrompt: jest.fn(),
             getPromptHash: jest.fn(),
+            getPromptTemplate: jest.fn(),
           },
         },
         {
@@ -212,6 +213,33 @@ describe('PromptsController', () => {
     const result = await controller.hash('structural-analysis');
 
     expect(service.getPromptHash).toHaveBeenCalledWith('structural-analysis');
+    expect(result).toEqual(expected);
+  });
+
+  it('should call getPromptTemplate with the name and request context (issue #66)', async () => {
+    const expected = {
+      name: 'bill-extraction',
+      templateText: 'tmpl',
+      variables: ['REGION_ID', 'HTML'],
+      promptHash: 'h',
+      promptVersion: 'v2',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+      experimentId: null,
+      variantName: null,
+    };
+
+    jest.spyOn(service, 'getPromptTemplate').mockResolvedValue(expected);
+
+    const result = await controller.template('bill-extraction', {
+      apiKey: 'test-key',
+      region: 'ca',
+    });
+
+    expect(service.getPromptTemplate).toHaveBeenCalledWith(
+      'bill-extraction',
+      'test-key',
+      'ca',
+    );
     expect(result).toEqual(expected);
   });
 });

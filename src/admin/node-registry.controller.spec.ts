@@ -49,7 +49,7 @@ describe('NodeRegistryController', () => {
     jest.spyOn(service, 'registerNode').mockResolvedValue(expected as never);
 
     const result = await controller.register(dto, {
-      adminKey: 'admin-test-key-123',
+      adminKeyPrefix: 'admin-te...',
     });
 
     expect(service.registerNode).toHaveBeenCalledWith(dto, 'admin-te...');
@@ -106,7 +106,7 @@ describe('NodeRegistryController', () => {
     jest.spyOn(service, 'certifyNode').mockResolvedValue(expected as never);
 
     const result = await controller.certify('1', dto, {
-      adminKey: 'admin-test-key-123',
+      adminKeyPrefix: 'admin-te...',
     });
 
     expect(service.certifyNode).toHaveBeenCalledWith('1', dto, 'admin-te...');
@@ -119,7 +119,7 @@ describe('NodeRegistryController', () => {
     jest.spyOn(service, 'decertifyNode').mockResolvedValue(expected as never);
 
     const result = await controller.decertify('1', dto, {
-      adminKey: 'admin-test-key-123',
+      adminKeyPrefix: 'admin-te...',
     });
 
     expect(service.decertifyNode).toHaveBeenCalledWith('1', dto, 'admin-te...');
@@ -132,7 +132,7 @@ describe('NodeRegistryController', () => {
     jest.spyOn(service, 'recertifyNode').mockResolvedValue(expected as never);
 
     const result = await controller.recertify('1', dto, {
-      adminKey: 'admin-test-key-123',
+      adminKeyPrefix: 'admin-te...',
     });
 
     expect(service.recertifyNode).toHaveBeenCalledWith('1', dto, 'admin-te...');
@@ -144,7 +144,7 @@ describe('NodeRegistryController', () => {
     jest.spyOn(service, 'rotateApiKey').mockResolvedValue(expected as never);
 
     const result = await controller.rotateKey('1', {
-      adminKey: 'admin-test-key-123',
+      adminKeyPrefix: 'admin-te...',
     });
 
     expect(service.rotateApiKey).toHaveBeenCalledWith('1', 'admin-te...');
@@ -178,7 +178,7 @@ describe('NodeRegistryController', () => {
         .mockRejectedValue(new NotFoundException());
 
       await expect(
-        controller.certify('not-found', {}, { adminKey: 'admin-key-12345' }),
+        controller.certify('not-found', {}, { adminKeyPrefix: 'admin-ke...' }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -190,7 +190,7 @@ describe('NodeRegistryController', () => {
         );
 
       await expect(
-        controller.certify('1', {}, { adminKey: 'admin-key-12345' }),
+        controller.certify('1', {}, { adminKeyPrefix: 'admin-ke...' }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -203,7 +203,7 @@ describe('NodeRegistryController', () => {
         controller.decertify(
           'not-found',
           { reason: 'test' },
-          { adminKey: 'admin-key-12345' },
+          { adminKeyPrefix: 'admin-ke...' },
         ),
       ).rejects.toThrow(NotFoundException);
     });
