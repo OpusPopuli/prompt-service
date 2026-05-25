@@ -56,7 +56,6 @@ export class NodeRegistryService {
           name: dto.name,
           region: dto.region,
           publicKey: dto.publicKey ?? null,
-          apiKey,
           apiKeyHash,
           status: 'pending',
         },
@@ -74,15 +73,16 @@ export class NodeRegistryService {
     });
 
     // Store plaintext key in Vault after transaction commits
+    let apiKeySecretId: string | null = null;
     try {
-      const secretId = await this.vault.createSecret(
+      apiKeySecretId = await this.vault.createSecret(
         apiKey,
         `node_key_${node.id}`,
         `API key for node ${node.name}`,
       );
       await this.prisma.node.update({
         where: { id: node.id },
-        data: { apiKeySecretId: secretId },
+        data: { apiKeySecretId },
       });
     } catch (error) {
       this.logger.warn({
@@ -99,7 +99,12 @@ export class NodeRegistryService {
       region: node.region,
       performedBy: adminKeyPrefix,
     });
-    return node;
+
+    // Return the plaintext key in the response body so the admin caller can
+    // hand it to the node operator. It is NEVER persisted to the nodes row —
+    // the only canonical copies are the hash (for Bearer lookup) and the
+    // Vault secret (for HMAC verification). See issue #59.
+    return { ...node, apiKey, apiKeySecretId };
   }
 
   async listNodes(query: ListNodesQueryDto) {
@@ -243,12 +248,29 @@ export class NodeRegistryService {
     const newApiKey = this.generateApiKey();
     const newApiKeyHash = this.hashApiKey(newApiKey);
 
+    // Vault write FIRST. If this fails, no DB state changes — the node keeps
+    // its old key and remains authenticatable. This is the atomicity fix from
+    // issue #59 (previously: DB updated, then Vault write — if Vault failed,
+    // HMAC auth silently broke because apiKeySecretId pointed at the stale
+    // entry while apiKeyHash had already rotated).
+    //
+    // The name includes a timestamp suffix so consecutive rotations don't
+    // collide with the still-extant previous entry (Vault enforces name
+    // uniqueness). The DB only ever stores the returned secret ID.
+    const newSecretId = await this.vault.createSecret(
+      newApiKey,
+      `node_key_${id}_${Date.now()}`,
+      `API key for node ${existingNode.name} (rotated)`,
+    );
+
+    // Now flip hash + secretId + audit log in a single DB transaction. Either
+    // the whole rotation lands or none of it does.
     const node = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.node.update({
         where: { id },
         data: {
-          apiKey: newApiKey,
           apiKeyHash: newApiKeyHash,
+          apiKeySecretId: newSecretId,
         },
       });
 
@@ -263,27 +285,21 @@ export class NodeRegistryService {
       return updated;
     });
 
-    // Update Vault: create new secret, delete old one
-    try {
-      const secretId = await this.vault.createSecret(
-        newApiKey,
-        `node_key_${id}`,
-        `API key for node ${node.name} (rotated)`,
-      );
-      if (existingNode.apiKeySecretId) {
+    // Best-effort cleanup of the previous Vault secret. A failure here leaves
+    // an orphaned Vault entry but does NOT break the node — it has already
+    // been rotated to the new secret in both DB columns.
+    if (existingNode.apiKeySecretId) {
+      try {
         await this.vault.deleteSecret(existingNode.apiKeySecretId);
+      } catch (error) {
+        this.logger.warn({
+          event: 'vault_delete_failed',
+          action: 'rotate_api_key_cleanup',
+          nodeId: id,
+          staleSecretId: existingNode.apiKeySecretId,
+          error: (error as Error).message,
+        });
       }
-      await this.prisma.node.update({
-        where: { id },
-        data: { apiKeySecretId: secretId },
-      });
-    } catch (error) {
-      this.logger.warn({
-        event: 'vault_write_failed',
-        action: 'rotate_api_key',
-        nodeId: id,
-        error: (error as Error).message,
-      });
     }
 
     this.logger.log({
@@ -291,7 +307,10 @@ export class NodeRegistryService {
       nodeId: id,
       performedBy: adminKeyPrefix,
     });
-    return node;
+
+    // Return the new plaintext key so the admin caller can hand it to the
+    // node operator. Never persisted to the row — see registerNode comment.
+    return { ...node, apiKey: newApiKey };
   }
 
   async deleteNode(id: string) {
