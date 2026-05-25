@@ -239,6 +239,21 @@ Certified nodes have a `certificationExpiresAt` timestamp (default: 365 days fro
 - The admin must run `/admin/nodes/:id/recertify` to restore access
 - Certification expiry does **not** invalidate or rotate the node's API key
 
+## Operational Surfaces
+
+### `/metrics` (Prometheus scrape endpoint)
+
+The `/metrics` endpoint is **intentionally unauthenticated** so a Prometheus scraper can pull counters without holding an admin or node API key. This is the standard Prometheus deployment pattern and matches what every observability stack expects.
+
+**Security model**: `/metrics` is assumed to be reachable **only from inside the cluster network** (or behind an ingress ACL that allows the scraper's source CIDR and nothing else). The service does not gate it because gating would break the scrape.
+
+If you deploy the service on a public address, you must restrict `/metrics` at the network or ingress layer:
+- Kubernetes: NetworkPolicy allowing only the Prometheus namespace/pod
+- Docker Compose: do not publish port 3210 publicly, or add a reverse-proxy ACL
+- Cloud (CF / ECS / Cloud Run): block `/metrics` at the load balancer
+
+Metric labels never include API keys, admin tokens, node IDs, or template text — only endpoint paths, HTTP methods, and status codes — so the scrape body itself does not contain secrets.
+
 ## Known Limitations
 
 1. **No mutual TLS**: Node-to-service communication uses Bearer tokens over HTTPS, not mTLS. This is acceptable for the current deployment model (internal Docker network) but should be revisited for multi-host federation.

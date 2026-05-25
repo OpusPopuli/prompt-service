@@ -12,11 +12,21 @@ import { AdminModule } from './admin/admin.module';
 import { ExperimentsModule } from './experiments/experiments.module';
 import { MetricsModule } from './metrics/metrics.module';
 
+// Global IP-based throttle. Default 60/min covers a single legitimate
+// user's traffic comfortably while still bounding brute-force attempts.
+// Raised in integration test envs (single container IP → single bucket
+// for the entire suite) via GLOBAL_THROTTLE_LIMIT. Mirrors the
+// ADMIN_THROTTLE_LIMIT pattern used for admin endpoints.
+const GLOBAL_THROTTLE_LIMIT = Number.parseInt(
+  process.env.GLOBAL_THROTTLE_LIMIT ?? '60',
+  10,
+);
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: GLOBAL_THROTTLE_LIMIT }]),
     PrismaModule,
     HealthModule,
     PromptsModule,

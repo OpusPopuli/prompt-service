@@ -67,6 +67,81 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  private computeHmacSignature(
+    apiKey: string,
+    timestamp: string,
+    method: string,
+    path: string,
+    bodyHash: string,
+  ): string {
+    const signatureString = `${timestamp}\n${method}\n${path}\n${bodyHash}`;
+    return createHmac('sha256', apiKey)
+      .update(signatureString)
+      .digest('base64');
+  }
+
+  /**
+   * Verify the HMAC signature against the canonical path form, falling
+   * back to the legacy form during the transitional release (issue #61).
+   * Throws UnauthorizedException when neither matches; emits the
+   * `hmac_legacy_path_signature` warn event when only the legacy form
+   * matches, so ops can monitor when to ship the follow-up tightening PR.
+   */
+  private verifyHmacSignature(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    request: any,
+    apiKey: string,
+    signature: string,
+    timestamp: string,
+    keyId: string,
+  ): void {
+    const rawBody = request.rawBody
+      ? Buffer.from(request.rawBody).toString('utf8')
+      : '';
+    const bodyHash = createHash('sha256').update(rawBody).digest('hex');
+    const method = request.method.toUpperCase();
+    const canonicalPath = request.originalUrl || request.url;
+    const legacyPath = request.path || request.url;
+
+    const canonicalSig = this.computeHmacSignature(
+      apiKey,
+      timestamp,
+      method,
+      canonicalPath,
+      bodyHash,
+    );
+    if (safeCompare(canonicalSig, signature)) return;
+
+    // Only compute the legacy candidate when the canonical form failed and
+    // the two forms actually differ — skips the work on the happy path.
+    if (canonicalPath !== legacyPath) {
+      const legacySig = this.computeHmacSignature(
+        apiKey,
+        timestamp,
+        method,
+        legacyPath,
+        bodyHash,
+      );
+      if (safeCompare(legacySig, signature)) {
+        this.logger.warn({
+          event: 'hmac_legacy_path_signature',
+          keyId,
+          canonicalPath,
+          legacyPath,
+        });
+        return;
+      }
+    }
+
+    this.logger.warn({
+      event: 'auth_failed',
+      method: 'hmac',
+      reason: 'signature_mismatch',
+      keyId,
+    });
+    throw new UnauthorizedException('Invalid HMAC signature');
+  }
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
@@ -173,28 +248,7 @@ export class ApiKeyGuard implements CanActivate, OnModuleInit {
       throw new UnauthorizedException('Failed to retrieve node key');
     }
 
-    // Compute expected signature
-    const rawBody = request.rawBody
-      ? Buffer.from(request.rawBody).toString('utf8')
-      : '';
-    const bodyHash = createHash('sha256').update(rawBody).digest('hex');
-    const method = request.method.toUpperCase();
-    const path = request.path || request.url;
-
-    const signatureString = `${timestamp}\n${method}\n${path}\n${bodyHash}`;
-    const expectedSignature = createHmac('sha256', apiKey)
-      .update(signatureString)
-      .digest('base64');
-
-    if (!safeCompare(expectedSignature, signature)) {
-      this.logger.warn({
-        event: 'auth_failed',
-        method: 'hmac',
-        reason: 'signature_mismatch',
-        keyId,
-      });
-      throw new UnauthorizedException('Invalid HMAC signature');
-    }
+    this.verifyHmacSignature(request, apiKey, signature, timestamp, keyId);
 
     // Propagate the authenticated secret so downstream audit logging
     // (apiKeyPrefix) can record which key served the request, matching

@@ -49,9 +49,11 @@ export class NodeRegistryController {
     status: 201,
     description: 'Node registered with generated API key',
   })
-  async register(@Body() dto: CreateNodeDto, @Req() req: { adminKey: string }) {
-    const adminKeyPrefix = req.adminKey.slice(0, 8) + '...';
-    return this.nodeRegistry.registerNode(dto, adminKeyPrefix);
+  async register(
+    @Body() dto: CreateNodeDto,
+    @Req() req: { adminKeyPrefix: string },
+  ) {
+    return this.nodeRegistry.registerNode(dto, req.adminKeyPrefix);
   }
 
   @Get()
@@ -86,10 +88,9 @@ export class NodeRegistryController {
   async certify(
     @Param('id') id: string,
     @Body() dto: CertifyNodeDto,
-    @Req() req: { adminKey: string },
+    @Req() req: { adminKeyPrefix: string },
   ) {
-    const adminKeyPrefix = req.adminKey.slice(0, 8) + '...';
-    return this.nodeRegistry.certifyNode(id, dto, adminKeyPrefix);
+    return this.nodeRegistry.certifyNode(id, dto, req.adminKeyPrefix);
   }
 
   @Post(':id/decertify')
@@ -98,10 +99,9 @@ export class NodeRegistryController {
   async decertify(
     @Param('id') id: string,
     @Body() dto: DecertifyNodeDto,
-    @Req() req: { adminKey: string },
+    @Req() req: { adminKeyPrefix: string },
   ) {
-    const adminKeyPrefix = req.adminKey.slice(0, 8) + '...';
-    return this.nodeRegistry.decertifyNode(id, dto, adminKeyPrefix);
+    return this.nodeRegistry.decertifyNode(id, dto, req.adminKeyPrefix);
   }
 
   @Post(':id/recertify')
@@ -110,18 +110,19 @@ export class NodeRegistryController {
   async recertify(
     @Param('id') id: string,
     @Body() dto: CertifyNodeDto,
-    @Req() req: { adminKey: string },
+    @Req() req: { adminKeyPrefix: string },
   ) {
-    const adminKeyPrefix = req.adminKey.slice(0, 8) + '...';
-    return this.nodeRegistry.recertifyNode(id, dto, adminKeyPrefix);
+    return this.nodeRegistry.recertifyNode(id, dto, req.adminKeyPrefix);
   }
 
   @Post(':id/rotate-key')
   @ApiOperation({ summary: 'Rotate a node API key' })
   @ApiResponse({ status: 404, description: NODE_NOT_FOUND })
-  async rotateKey(@Param('id') id: string, @Req() req: { adminKey: string }) {
-    const adminKeyPrefix = req.adminKey.slice(0, 8) + '...';
-    return this.nodeRegistry.rotateApiKey(id, adminKeyPrefix);
+  async rotateKey(
+    @Param('id') id: string,
+    @Req() req: { adminKeyPrefix: string },
+  ) {
+    return this.nodeRegistry.rotateApiKey(id, req.adminKeyPrefix);
   }
 
   @Delete(':id')

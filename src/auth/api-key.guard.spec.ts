@@ -38,11 +38,19 @@ function createMockVault() {
   };
 }
 
-function createMockContext(headers: Record<string, string> = {}) {
+function createMockContext(
+  headers: Record<string, string> = {},
+  pathOverrides: { path?: string; originalUrl?: string } = {},
+) {
+  const path = pathOverrides.path ?? '/prompts/rag';
   const request: Record<string, unknown> = {
     headers,
     method: 'POST',
-    path: '/prompts/rag',
+    path,
+    // Mirror real Express, which always sets originalUrl. Tests can pass a
+    // different value via overrides to exercise the canonical-vs-legacy
+    // path matching introduced in #61.
+    originalUrl: pathOverrides.originalUrl ?? path,
   };
 
   return {
@@ -498,6 +506,144 @@ describe('ApiKeyGuard', () => {
 
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(request.nodeId).toBe(nodeId);
+    });
+
+    describe('path canonicalization — transitional accept-both-forms (issue #61)', () => {
+      // The server initially accepts both the canonical form (originalUrl,
+      // with query string) and the legacy form (path, no query string) so
+      // currently-deployed @opuspopuli/prompt-client versions keep working
+      // during rollout. A follow-up PR tightens to canonical-only after
+      // the `hmac_legacy_path_signature` metric drops to zero.
+
+      const body = '{"x":1}';
+      const timestamp = () => Math.floor(Date.now() / 1000).toString();
+
+      beforeEach(() => {
+        mockPrisma.node.findUnique.mockResolvedValue(certifiedNode);
+        mockVault.getSecret.mockResolvedValue(apiKey);
+      });
+
+      function buildSignedHeaders(
+        ts: string,
+        method: string,
+        signedPath: string,
+        b: string,
+      ) {
+        return {
+          'x-hmac-signature': computeHmac(apiKey, ts, method, signedPath, b),
+          'x-hmac-timestamp': ts,
+          'x-hmac-key-id': nodeId,
+          'content-type': 'application/json',
+        };
+      }
+
+      it('accepts the canonical form (originalUrl with query string)', async () => {
+        const ts = timestamp();
+        const canonical = '/admin/nodes?status=certified';
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', canonical, body),
+          { path: '/admin/nodes', originalUrl: canonical },
+        );
+        // Re-attach rawBody so HMAC body hash matches
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+
+        await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      });
+
+      it('accepts the legacy form (path-only) during transition', async () => {
+        const ts = timestamp();
+        const canonical = '/admin/nodes?status=certified';
+        const legacy = '/admin/nodes';
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', legacy, body),
+          { path: legacy, originalUrl: canonical },
+        );
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+
+        await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      });
+
+      it('logs `hmac_legacy_path_signature` when the legacy form is used', async () => {
+        const warnSpy = jest.spyOn(
+          (guard as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        );
+        const ts = timestamp();
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', '/admin/nodes', body),
+          {
+            path: '/admin/nodes',
+            originalUrl: '/admin/nodes?status=certified',
+          },
+        );
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+
+        await guard.canActivate(ctx);
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: 'hmac_legacy_path_signature',
+            keyId: nodeId,
+          }),
+        );
+      });
+
+      it('does NOT log the legacy event when canonical signature succeeds', async () => {
+        const warnSpy = jest.spyOn(
+          (guard as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        );
+        const ts = timestamp();
+        const canonical = '/admin/nodes?status=certified';
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', canonical, body),
+          { path: '/admin/nodes', originalUrl: canonical },
+        );
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+
+        await guard.canActivate(ctx);
+
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.objectContaining({ event: 'hmac_legacy_path_signature' }),
+        );
+      });
+
+      it('rejects a signature that matches NEITHER form', async () => {
+        const ts = timestamp();
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', '/wrong/path', body),
+          {
+            path: '/admin/nodes',
+            originalUrl: '/admin/nodes?status=certified',
+          },
+        );
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+
+        await expect(guard.canActivate(ctx)).rejects.toThrow(
+          UnauthorizedException,
+        );
+      });
+
+      it('does NOT attempt legacy fallback when originalUrl equals path (no query)', async () => {
+        // When the request has no query string, canonical == legacy, so
+        // there's no second candidate to compute. Saves the work on the
+        // happy path (prompts endpoints today don't use query strings).
+        const ts = timestamp();
+        const { ctx } = createMockContext(
+          buildSignedHeaders(ts, 'POST', '/prompts/rag', body),
+          { path: '/prompts/rag', originalUrl: '/prompts/rag' },
+        );
+        ctx.switchToHttp().getRequest().rawBody = Buffer.from(body);
+        const warnSpy = jest.spyOn(
+          (guard as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        );
+
+        await expect(guard.canActivate(ctx)).resolves.toBe(true);
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.objectContaining({ event: 'hmac_legacy_path_signature' }),
+        );
+      });
     });
   });
 });

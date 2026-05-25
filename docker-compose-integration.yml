@@ -38,6 +38,15 @@ services:
       # serial test execution. Production behavior is verified separately by
       # the hardening unit tests + live smoke test.
       ADMIN_THROTTLE_LIMIT: '1000'
+      # Raise the global IP throttle for the same reason: the integration
+      # suite fires 100+ requests from a single container IP, well past the
+      # production default of 60/min.
+      GLOBAL_THROTTLE_LIMIT: '10000'
+      # Raise the per-route prompt POST throttle similarly. The default 30/min
+      # is hit by the cumulative POST count across all prompts integration
+      # suites running serially from one container IP. Production behavior
+      # is verified by the dedicated rate-limiting/throttle.integration.spec.ts.
+      PROMPT_THROTTLE_LIMIT: '10000'
       PORT: 3200
     depends_on:
       opuspopuli-prompts-db-test:
