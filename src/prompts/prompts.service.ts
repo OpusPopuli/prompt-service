@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../common/prisma.service';
@@ -37,8 +42,38 @@ interface ResolvedTemplate {
   variantName?: string;
 }
 
+/**
+ * Describes how to compose a single prompt endpoint. The compose pipeline
+ * (resolveTemplate → optional auxiliary → interpolate → buildResponse →
+ * logRequest) is identical across all endpoints; descriptors capture only
+ * the per-endpoint variation (issue #60).
+ *
+ * Adding a new prompt type is now: define the DTO + add one descriptor.
+ */
+interface PromptDescriptor<TDto> {
+  /** Audit-log label and the value passed to logRequest. */
+  endpoint: string;
+  /** Resolve the primary template name from the DTO (often a constant). */
+  resolveTemplateName: (dto: TDto) => string;
+  /** Optional fallback template name when the primary doesn't exist. */
+  fallbackTemplateName?: string;
+  /** Build the interpolation variable map from the DTO. */
+  buildVariables: (dto: TDto) => Record<string, string>;
+  /**
+   * Optional auxiliary template. Its text is either injected as a variable
+   * in the main interpolation (`variableName`) or appended after the
+   * interpolated main text (`appendAfter`). Exactly one must be set.
+   */
+  auxiliary?: {
+    resolveTemplateName: (dto: TDto) => string;
+    fallbackTemplateName?: string;
+    variableName?: string;
+    appendAfter?: boolean;
+  };
+}
+
 @Injectable()
-export class PromptsService {
+export class PromptsService implements OnModuleInit {
   private readonly logger = new Logger(PromptsService.name);
 
   /**
@@ -60,48 +95,102 @@ export class PromptsService {
     private readonly experiments: ExperimentsService,
   ) {}
 
+  // ---------------------------------------------------------------------------
+  // Descriptor table — one entry per /prompts/* endpoint.
+  // ---------------------------------------------------------------------------
+
+  private readonly descriptors = {
+    structuralAnalysis: {
+      endpoint: 'structural-analysis',
+      resolveTemplateName: () => 'structural-analysis',
+      buildVariables: (dto: StructuralAnalysisDto) => ({
+        DATA_TYPE: dto.dataType,
+        CONTENT_GOAL: dto.contentGoal,
+        CATEGORY: dto.category ? ` (category: ${dto.category})` : '',
+        HINTS_SECTION: this.renderHintsSection(dto.hints),
+        HTML: dto.html,
+      }),
+      auxiliary: {
+        resolveTemplateName: (dto: StructuralAnalysisDto) =>
+          `structural-schema-${dto.dataType}`,
+        fallbackTemplateName: 'structural-schema-default',
+        variableName: 'SCHEMA_DESCRIPTION',
+      },
+    } satisfies PromptDescriptor<StructuralAnalysisDto>,
+
+    documentAnalysis: {
+      endpoint: 'document-analysis',
+      resolveTemplateName: (dto: DocumentAnalysisDto) =>
+        `document-analysis-${dto.documentType}`,
+      fallbackTemplateName: 'document-analysis-generic',
+      buildVariables: (dto: DocumentAnalysisDto) => ({ TEXT: dto.text }),
+      auxiliary: {
+        resolveTemplateName: () => 'document-analysis-base-instructions',
+        appendAfter: true,
+      },
+    } satisfies PromptDescriptor<DocumentAnalysisDto>,
+
+    rag: {
+      endpoint: 'rag',
+      resolveTemplateName: () => 'rag',
+      buildVariables: (dto: RagDto) => ({
+        CONTEXT: dto.context,
+        QUERY: dto.query,
+      }),
+    } satisfies PromptDescriptor<RagDto>,
+
+    civicsExtraction: {
+      endpoint: 'civics-extraction',
+      resolveTemplateName: () => 'civics-extraction',
+      buildVariables: (dto: CivicsExtractionDto) => ({
+        REGION_ID: dto.regionId,
+        SOURCE_URL: dto.sourceUrl,
+        CONTENT_GOAL: dto.contentGoal,
+        CATEGORY: dto.category ? `Category: ${dto.category}\n` : '',
+        HINTS: this.renderHintsSection(dto.hints),
+        HTML: dto.html,
+      }),
+    } satisfies PromptDescriptor<CivicsExtractionDto>,
+
+    billExtraction: {
+      endpoint: 'bill-extraction',
+      resolveTemplateName: () => 'bill-extraction',
+      buildVariables: (dto: BillExtractionDto) => ({
+        REGION_ID: dto.regionId,
+        SOURCE_URL: dto.sourceUrl,
+        SESSION_YEAR: dto.sessionYear,
+        HTML: dto.html,
+      }),
+    } satisfies PromptDescriptor<BillExtractionDto>,
+
+    billVotesExtraction: {
+      endpoint: 'bill-votes-extraction',
+      resolveTemplateName: () => 'bill-votes-extraction',
+      buildVariables: (dto: BillVotesExtractionDto) => ({
+        REGION_ID: dto.regionId,
+        SOURCE_URL: dto.sourceUrl,
+        SESSION_YEAR: dto.sessionYear,
+        BILL_ID: dto.billId,
+        HTML: dto.html,
+      }),
+    } satisfies PromptDescriptor<BillVotesExtractionDto>,
+  };
+
+  // ---------------------------------------------------------------------------
+  // Public API — one one-liner per endpoint. Each delegates to composePrompt.
+  // ---------------------------------------------------------------------------
+
   async getStructuralAnalysisPrompt(
     dto: StructuralAnalysisDto,
     apiKey: string,
     region: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate('structural-analysis', apiKey);
-
-    // Schema/auxiliary templates always use default (no A/B)
-    const schemaTemplate = await this.getActiveTemplate(
-      `structural-schema-${dto.dataType}`,
-      'structural-schema-default',
-    );
-    this.warnOnVariableDrift(schemaTemplate);
-
-    const hintsSection = dto.hints?.length
-      ? '## Hints from the region author\n' +
-        dto.hints.map((h) => '- ' + h).join('\n') +
-        '\n'
-      : '';
-
-    const promptText = this.interpolate(template.templateText, {
-      DATA_TYPE: dto.dataType,
-      CONTENT_GOAL: dto.contentGoal,
-      CATEGORY: dto.category ? ` (category: ${dto.category})` : '',
-      HINTS_SECTION: hintsSection,
-      SCHEMA_DESCRIPTION: schemaTemplate.templateText,
-      HTML: dto.html,
-    });
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'structural-analysis',
-      template.version,
+    return this.composePrompt(
+      this.descriptors.structuralAnalysis,
+      dto,
       apiKey,
       region,
-      template.experimentId,
-      template.variantName,
     );
-
-    return response;
   }
 
   async getDocumentAnalysisPrompt(
@@ -109,36 +198,20 @@ export class PromptsService {
     apiKey: string,
     region: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate(
-      `document-analysis-${dto.documentType}`,
-      apiKey,
-      'document-analysis-generic',
-    );
-
-    // Base instructions always use default (no A/B)
-    const baseInstructions = await this.getActiveTemplate(
-      'document-analysis-base-instructions',
-    );
-    this.warnOnVariableDrift(baseInstructions);
-
-    const promptText =
-      this.interpolate(template.templateText, { TEXT: dto.text }) +
-      '\n' +
-      baseInstructions.templateText;
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'document-analysis',
-      template.version,
+    return this.composePrompt(
+      this.descriptors.documentAnalysis,
+      dto,
       apiKey,
       region,
-      template.experimentId,
-      template.variantName,
     );
+  }
 
-    return response;
+  async getRagPrompt(
+    dto: RagDto,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptServiceResponse> {
+    return this.composePrompt(this.descriptors.rag, dto, apiKey, region);
   }
 
   /**
@@ -153,36 +226,12 @@ export class PromptsService {
     apiKey: string,
     region: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate('civics-extraction', apiKey);
-
-    const hintsSection = dto.hints?.length
-      ? '## Hints from the region author\n' +
-        dto.hints.map((h) => '- ' + h).join('\n') +
-        '\n'
-      : '';
-
-    const promptText = this.interpolate(template.templateText, {
-      REGION_ID: dto.regionId,
-      SOURCE_URL: dto.sourceUrl,
-      CONTENT_GOAL: dto.contentGoal,
-      CATEGORY: dto.category ? `Category: ${dto.category}\n` : '',
-      HINTS: hintsSection,
-      HTML: dto.html,
-    });
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'civics-extraction',
-      template.version,
+    return this.composePrompt(
+      this.descriptors.civicsExtraction,
+      dto,
       apiKey,
       region,
-      template.experimentId,
-      template.variantName,
     );
-
-    return response;
   }
 
   async getBillExtractionPrompt(
@@ -190,28 +239,12 @@ export class PromptsService {
     apiKey: string,
     region: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate('bill-extraction', apiKey);
-
-    const promptText = this.interpolate(template.templateText, {
-      REGION_ID: dto.regionId,
-      SOURCE_URL: dto.sourceUrl,
-      SESSION_YEAR: dto.sessionYear,
-      HTML: dto.html,
-    });
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'bill-extraction',
-      template.version,
+    return this.composePrompt(
+      this.descriptors.billExtraction,
+      dto,
       apiKey,
       region,
-      template.experimentId,
-      template.variantName,
     );
-
-    return response;
   }
 
   async getBillVotesExtractionPrompt(
@@ -219,59 +252,12 @@ export class PromptsService {
     apiKey: string,
     region: string,
   ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate(
-      'bill-votes-extraction',
-      apiKey,
-    );
-
-    const promptText = this.interpolate(template.templateText, {
-      REGION_ID: dto.regionId,
-      SOURCE_URL: dto.sourceUrl,
-      SESSION_YEAR: dto.sessionYear,
-      BILL_ID: dto.billId,
-      HTML: dto.html,
-    });
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'bill-votes-extraction',
-      template.version,
+    return this.composePrompt(
+      this.descriptors.billVotesExtraction,
+      dto,
       apiKey,
       region,
-      template.experimentId,
-      template.variantName,
     );
-
-    return response;
-  }
-
-  async getRagPrompt(
-    dto: RagDto,
-    apiKey: string,
-    region: string,
-  ): Promise<PromptServiceResponse> {
-    const template = await this.resolveTemplate('rag', apiKey);
-
-    const promptText = this.interpolate(template.templateText, {
-      CONTEXT: dto.context,
-      QUERY: dto.query,
-    });
-
-    const response = this.buildResponse(template);
-    response.promptText = promptText;
-
-    await this.logRequest(
-      'rag',
-      template.version,
-      apiKey,
-      region,
-      template.experimentId,
-      template.variantName,
-    );
-
-    return response;
   }
 
   /**
@@ -295,23 +281,144 @@ export class PromptsService {
     };
   }
 
+  /**
+   * Verify that a (hash, version) pair matches a known template version.
+   *
+   * Queries the indexed `prompt_version_history.templateHash` column rather
+   * than recomputing SHA-256 over every active template per call (issue #60).
+   *
+   * Behavior shift (intentional, called out in #60 PR):
+   *   - Matches HISTORICAL versions too, not only the currently-active
+   *     template text. A previously-shipped hash now returns valid=true
+   *     instead of valid=false.
+   *   - Malformed `promptVersion` (anything not parseable as `v<int>`)
+   *     short-circuits to `{ valid: false }` instead of scanning every
+   *     template in the DB.
+   */
   async verifyPrompt(
     promptHash: string,
     promptVersion: string,
   ): Promise<VerifyResult> {
-    const versionNum = Number.parseInt(promptVersion.replace('v', ''), 10);
+    const versionNum = Number.parseInt(promptVersion.replace(/^v/, ''), 10);
+    if (Number.isNaN(versionNum)) {
+      return { valid: false };
+    }
 
-    const templates = await this.prisma.promptTemplate.findMany({
-      where: { version: Number.isNaN(versionNum) ? undefined : versionNum },
+    const entry = await this.prisma.promptVersionHistory.findFirst({
+      where: { templateHash: promptHash, version: versionNum },
+      include: { template: { select: { name: true } } },
     });
 
-    for (const t of templates) {
-      if (this.hash(t.templateText) === promptHash) {
-        return { valid: true, templateName: t.name };
+    if (!entry) {
+      return { valid: false };
+    }
+
+    return { valid: true, templateName: entry.template.name };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Startup — variable drift self-check
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Scan all active templates for placeholder/variable drift once at boot
+   * and log a summary. This was previously done on every request
+   * (`warnOnVariableDrift`); moved here per issue #60 so the hot path
+   * doesn't pay for a build-time validation check.
+   *
+   * Drift kinds:
+   *   - declared-but-unused: a name in `variables[]` has no matching
+   *     `{{NAME}}` in `templateText`.
+   *   - undeclared placeholder: a `{{NAME}}` in the text isn't in
+   *     `variables[]` — callers may pass it but won't be type-checked.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.runVariableDriftCheck();
+  }
+
+  async runVariableDriftCheck(): Promise<void> {
+    try {
+      const templates = await this.prisma.promptTemplate.findMany({
+        where: { isActive: true },
+      });
+
+      let warningCount = 0;
+      for (const t of templates) {
+        warningCount += this.warnOnVariableDrift({
+          templateText: t.templateText,
+          version: t.version,
+          name: t.name,
+          variables: t.variables,
+        });
+      }
+
+      if (warningCount === 0) {
+        this.logger.log(
+          `Variable drift check passed for ${templates.length} active template(s)`,
+        );
+      } else {
+        this.logger.warn(
+          `Variable drift check found ${warningCount} issue(s) across ${templates.length} active template(s) — see prior warn lines`,
+        );
+      }
+    } catch (err) {
+      // Don't crash the service on a startup DB hiccup — this check is
+      // diagnostic. The next request will surface real DB issues.
+      this.logger.warn(
+        `Variable drift check skipped: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private composition pipeline
+  // ---------------------------------------------------------------------------
+
+  private async composePrompt<TDto>(
+    descriptor: PromptDescriptor<TDto>,
+    dto: TDto,
+    apiKey: string,
+    region: string,
+  ): Promise<PromptServiceResponse> {
+    const template = await this.resolveTemplate(
+      descriptor.resolveTemplateName(dto),
+      apiKey,
+      descriptor.fallbackTemplateName,
+    );
+
+    const variables = descriptor.buildVariables(dto);
+    let auxiliaryText: string | undefined;
+
+    if (descriptor.auxiliary) {
+      const aux = await this.getActiveTemplate(
+        descriptor.auxiliary.resolveTemplateName(dto),
+        descriptor.auxiliary.fallbackTemplateName,
+      );
+      if (descriptor.auxiliary.variableName) {
+        variables[descriptor.auxiliary.variableName] = aux.templateText;
+      } else if (descriptor.auxiliary.appendAfter) {
+        auxiliaryText = aux.templateText;
       }
     }
 
-    return { valid: false };
+    let promptText = this.interpolate(template.templateText, variables);
+    if (auxiliaryText !== undefined) {
+      promptText = promptText + '\n' + auxiliaryText;
+    }
+
+    const response = this.buildResponse(template);
+    response.promptText = promptText;
+
+    await this.logRequest(
+      descriptor.endpoint,
+      template.version,
+      apiKey,
+      region,
+      template.experimentId,
+      template.variantName,
+    );
+
+    return response;
   }
 
   private async resolveTemplate(
@@ -325,22 +432,18 @@ export class PromptsService {
       apiKey,
     );
     if (experimentResult) {
-      const resolved: ResolvedTemplate = {
+      return {
         templateText: experimentResult.templateText,
         version: experimentResult.version,
         name,
-        // variables not available from experiment variant path
+        // variables not available on the experiment path; drift check
+        // runs at startup over canonical templates instead.
         experimentId: experimentResult.experimentId,
         variantName: experimentResult.variantName,
       };
-      this.warnOnVariableDrift(resolved);
-      return resolved;
     }
 
-    // Fall back to default active template
-    const resolved = await this.getActiveTemplate(name, fallbackName);
-    this.warnOnVariableDrift(resolved);
-    return resolved;
+    return this.getActiveTemplate(name, fallbackName);
   }
 
   private async getActiveTemplate(
@@ -369,6 +472,15 @@ export class PromptsService {
     };
   }
 
+  private renderHintsSection(hints?: string[]): string {
+    if (!hints?.length) return '';
+    return (
+      '## Hints from the region author\n' +
+      hints.map((h) => '- ' + h).join('\n') +
+      '\n'
+    );
+  }
+
   private extractPlaceholders(text: string): Set<string> {
     const found = new Set<string>();
     for (const match of text.matchAll(/\{\{([A-Z_]+)\}\}/g)) {
@@ -377,15 +489,24 @@ export class PromptsService {
     return found;
   }
 
-  private warnOnVariableDrift(template: ResolvedTemplate): void {
-    if (!template.variables) return;
+  /**
+   * Compare a template's declared variables[] against the {{PLACEHOLDERS}}
+   * actually present in its text. Logs a warn line per mismatch. Returns
+   * the number of warnings emitted (caller aggregates).
+   *
+   * Invoked once at startup via runVariableDriftCheck — not per request.
+   */
+  private warnOnVariableDrift(template: ResolvedTemplate): number {
+    if (!template.variables) return 0;
     const inText = this.extractPlaceholders(template.templateText);
     const declared = new Set(template.variables);
+    let warnings = 0;
     for (const v of declared) {
       if (!inText.has(v)) {
         this.logger.warn(
           `Template "${template.name}": variable "${v}" declared but not used in template text`,
         );
+        warnings += 1;
       }
     }
     for (const v of inText) {
@@ -393,8 +514,10 @@ export class PromptsService {
         this.logger.warn(
           `Template "${template.name}": placeholder "{{${v}}}" found in text but not declared in variables`,
         );
+        warnings += 1;
       }
     }
+    return warnings;
   }
 
   private interpolate(

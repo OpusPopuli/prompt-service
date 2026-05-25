@@ -9,6 +9,9 @@ function createMockPrisma() {
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    promptVersionHistory: {
+      findFirst: jest.fn(),
+    },
     promptRequestLog: {
       create: jest.fn(),
     },
@@ -433,28 +436,82 @@ describe('PromptsService', () => {
   });
 
   describe('verifyPrompt', () => {
-    it('should return valid for matching hash', async () => {
+    it('should return valid for a matching (hash, version) pair', async () => {
       const templateText = 'test template';
       const expectedHash = createHash('sha256')
         .update(templateText)
         .digest('hex');
 
-      prisma.promptTemplate.findMany.mockResolvedValue([
-        { name: 'test', templateText, version: 1 },
-      ]);
+      prisma.promptVersionHistory.findFirst.mockResolvedValue({
+        id: 'v-1',
+        templateText,
+        templateHash: expectedHash,
+        version: 1,
+        template: { name: 'test' },
+      });
 
       const result = await service.verifyPrompt(expectedHash, 'v1');
+
       expect(result.valid).toBe(true);
       expect(result.templateName).toBe('test');
+      expect(prisma.promptVersionHistory.findFirst).toHaveBeenCalledWith({
+        where: { templateHash: expectedHash, version: 1 },
+        include: { template: { select: { name: true } } },
+      });
     });
 
-    it('should return invalid for non-matching hash', async () => {
-      prisma.promptTemplate.findMany.mockResolvedValue([
-        { name: 'test', templateText: 'some template', version: 1 },
-      ]);
+    it('should return invalid when no version_history entry matches', async () => {
+      prisma.promptVersionHistory.findFirst.mockResolvedValue(null);
 
       const result = await service.verifyPrompt('badhash', 'v1');
       expect(result.valid).toBe(false);
+    });
+
+    it('should match HISTORICAL versions, not only currently-active templates (issue #60 behavior shift)', async () => {
+      // A v3 hash for a template whose live row is now at v5. The old
+      // implementation scanned promptTemplate.findMany — which only sees
+      // the current row text — and returned invalid. The new query hits
+      // prompt_version_history, which retains every shipped version.
+      const historicalText = 'an older revision of the template';
+      const historicalHash = createHash('sha256')
+        .update(historicalText)
+        .digest('hex');
+
+      prisma.promptVersionHistory.findFirst.mockResolvedValue({
+        id: 'v-old',
+        templateText: historicalText,
+        templateHash: historicalHash,
+        version: 3,
+        template: { name: 'rag' },
+      });
+
+      const result = await service.verifyPrompt(historicalHash, 'v3');
+      expect(result.valid).toBe(true);
+      expect(result.templateName).toBe('rag');
+    });
+
+    it('should short-circuit on malformed promptVersion without touching the DB', async () => {
+      const result = await service.verifyPrompt('any-hash', 'not-a-version');
+
+      expect(result).toEqual({ valid: false });
+      expect(prisma.promptVersionHistory.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('should accept bare numeric promptVersion (no leading "v")', async () => {
+      prisma.promptVersionHistory.findFirst.mockResolvedValue({
+        id: 'v-1',
+        templateText: 'foo',
+        templateHash: 'h',
+        version: 2,
+        template: { name: 'rag' },
+      });
+
+      await service.verifyPrompt('h', '2');
+
+      expect(prisma.promptVersionHistory.findFirst).toHaveBeenCalledWith({
+        where: { templateHash: 'h', version: 2 },
+        include: { template: { select: { name: true } } },
+      });
     });
   });
 
@@ -641,98 +698,40 @@ describe('PromptsService', () => {
     });
   });
 
-  describe('warnOnVariableDrift', () => {
-    // These tests use a simplified "rag" mock with intentional drift — the
-    // warnings they produce are expected and do not indicate a real template issue.
-    function makeTemplate(templateText: string, variables: string[]) {
+  describe('runVariableDriftCheck (startup-once)', () => {
+    // Issue #60 moved drift detection off the request path. These tests
+    // hit the new startup entry point directly. The intentionally-drifted
+    // templates in some tests produce warn logs by design.
+    function makeTemplate(
+      name: string,
+      templateText: string,
+      variables: string[],
+    ) {
+      return { name, templateText, version: 1, isActive: true, variables };
+    }
+
+    function spyLogger() {
       return {
-        id: '1',
-        name: 'rag',
-        templateText,
-        version: 1,
-        isActive: true,
-        variables,
+        warn: jest.spyOn(
+          (service as unknown as { logger: { warn: jest.Mock } }).logger,
+          'warn',
+        ),
+        log: jest.spyOn(
+          (service as unknown as { logger: { log: jest.Mock } }).logger,
+          'log',
+        ),
       };
     }
 
-    it('does not warn when declared variables match placeholders exactly', async () => {
+    it('does NOT run drift detection on the request path (hot path is clean)', async () => {
       const warnSpy = jest.spyOn(
         (service as unknown as { logger: { warn: jest.Mock } }).logger,
         'warn',
       );
+      // Set up a deliberately-drifted template; if the per-request check
+      // had survived the refactor, the rag call below would warn.
       prisma.promptTemplate.findFirst.mockResolvedValue(
-        makeTemplate('{{CONTEXT}} {{QUERY}}', ['CONTEXT', 'QUERY']),
-      );
-      prisma.promptRequestLog.create.mockResolvedValue({});
-
-      await service.getRagPrompt(
-        { context: 'ctx', query: 'q' },
-        'test-key',
-        'ca',
-      );
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('drift'),
-      );
-    });
-
-    it('warns when a declared variable has no matching placeholder in template text', async () => {
-      const warnSpy = jest.spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
-      );
-      prisma.promptTemplate.findFirst.mockResolvedValue(
-        makeTemplate('{{CONTEXT}}', ['CONTEXT', 'QUERY']),
-      );
-      prisma.promptRequestLog.create.mockResolvedValue({});
-
-      await service.getRagPrompt(
-        { context: 'ctx', query: 'q' },
-        'test-key',
-        'ca',
-      );
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('"QUERY" declared but not used'),
-      );
-    });
-
-    it('warns when a placeholder in template text is not declared in variables', async () => {
-      const warnSpy = jest.spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
-      );
-      prisma.promptTemplate.findFirst.mockResolvedValue(
-        makeTemplate('{{CONTEXT}} {{QUERY}} {{UNDECLARED}}', [
-          'CONTEXT',
-          'QUERY',
-        ]),
-      );
-      prisma.promptRequestLog.create.mockResolvedValue({});
-
-      await service.getRagPrompt(
-        { context: 'ctx', query: 'q' },
-        'test-key',
-        'ca',
-      );
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '"{{UNDECLARED}}" found in text but not declared',
-        ),
-      );
-    });
-
-    it('skips drift check when variables field is absent (experiment path)', async () => {
-      experiments.resolveExperiment.mockResolvedValue({
-        templateText: '{{CONTEXT}} {{QUERY}} {{ORPHAN}}',
-        version: 2,
-        experimentId: 'exp-1',
-        variantName: 'variant_a',
-      });
-      const warnSpy = jest.spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
+        makeTemplate('rag', '{{CONTEXT}} {{ORPHAN}}', ['CONTEXT', 'QUERY']),
       );
       prisma.promptRequestLog.create.mockResolvedValue({});
 
@@ -748,6 +747,90 @@ describe('PromptsService', () => {
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('found in text but not declared'),
       );
+    });
+
+    it('logs a clean-pass summary when no drift exists', async () => {
+      prisma.promptTemplate.findMany.mockResolvedValue([
+        makeTemplate('rag', '{{CONTEXT}} {{QUERY}}', ['CONTEXT', 'QUERY']),
+        makeTemplate('other', '{{X}}', ['X']),
+      ]);
+      const { warn, log } = spyLogger();
+
+      await service.runVariableDriftCheck();
+
+      expect(warn).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Variable drift check passed for 2 active template(s)',
+        ),
+      );
+    });
+
+    it('warns when a declared variable has no matching placeholder in template text', async () => {
+      prisma.promptTemplate.findMany.mockResolvedValue([
+        makeTemplate('rag', '{{CONTEXT}}', ['CONTEXT', 'QUERY']),
+      ]);
+      const { warn } = spyLogger();
+
+      await service.runVariableDriftCheck();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('"QUERY" declared but not used'),
+      );
+    });
+
+    it('warns when a placeholder in template text is not declared in variables', async () => {
+      prisma.promptTemplate.findMany.mockResolvedValue([
+        makeTemplate('rag', '{{CONTEXT}} {{QUERY}} {{UNDECLARED}}', [
+          'CONTEXT',
+          'QUERY',
+        ]),
+      ]);
+      const { warn } = spyLogger();
+
+      await service.runVariableDriftCheck();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '"{{UNDECLARED}}" found in text but not declared',
+        ),
+      );
+    });
+
+    it('logs an aggregate-warning summary when drift exists', async () => {
+      prisma.promptTemplate.findMany.mockResolvedValue([
+        makeTemplate('rag', '{{CONTEXT}}', ['CONTEXT', 'QUERY']),
+      ]);
+      const { warn } = spyLogger();
+
+      await service.runVariableDriftCheck();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Variable drift check found 1 issue(s) across 1 active template(s)',
+        ),
+      );
+    });
+
+    it('does not crash the service on a startup DB hiccup', async () => {
+      prisma.promptTemplate.findMany.mockRejectedValue(
+        new Error('DB unreachable'),
+      );
+      const { warn } = spyLogger();
+
+      await expect(service.runVariableDriftCheck()).resolves.not.toThrow();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Variable drift check skipped'),
+      );
+    });
+
+    it('onModuleInit invokes runVariableDriftCheck', async () => {
+      prisma.promptTemplate.findMany.mockResolvedValue([]);
+      const spy = jest.spyOn(service, 'runVariableDriftCheck');
+
+      await service.onModuleInit();
+
+      expect(spy).toHaveBeenCalled();
     });
   });
 
