@@ -30,6 +30,14 @@ services:
       ADMIN_API_KEYS: admin-test-key-1
       PROMPT_TTL_SECONDS: 300
       HMAC_TIMESTAMP_TOLERANCE_SECONDS: 300
+      # Image runs NODE_ENV=production; opt-in to Swagger so the hardening
+      # integration suite can assert /api is reachable when the flag is set.
+      ENABLE_SWAGGER: 'true'
+      # Raise admin throttle so admin-heavy integration suites (templates,
+      # node-registry) don't hit the production-default 10/min during bursty
+      # serial test execution. Production behavior is verified separately by
+      # the hardening unit tests + live smoke test.
+      ADMIN_THROTTLE_LIMIT: '1000'
       PORT: 3200
     depends_on:
       opuspopuli-prompts-db-test:

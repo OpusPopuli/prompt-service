@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AdminKeyGuard } from '../auth/admin-key.guard';
 import { NodeRegistryService } from './node-registry.service';
 import { CreateNodeDto } from './dto/create-node.dto';
@@ -26,9 +27,18 @@ import { DecertifyNodeDto } from './dto/decertify-node.dto';
 
 const NODE_NOT_FOUND = 'Node not found';
 
+// 10/min default — stricter than the global 60/min for admin actions
+// (key rotation, certification). Configurable via ADMIN_THROTTLE_LIMIT.
+// See #58 and src/admin/admin.controller.ts for the rationale.
+const ADMIN_THROTTLE_LIMIT = Number.parseInt(
+  process.env.ADMIN_THROTTLE_LIMIT ?? '10',
+  10,
+);
+
 @ApiTags('admin - nodes')
 @Controller('admin/nodes')
 @UseGuards(AdminKeyGuard)
+@Throttle({ default: { ttl: 60_000, limit: ADMIN_THROTTLE_LIMIT } })
 @ApiBearerAuth()
 export class NodeRegistryController {
   constructor(private readonly nodeRegistry: NodeRegistryService) {}
