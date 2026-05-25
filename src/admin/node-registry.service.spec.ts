@@ -53,12 +53,11 @@ describe('NodeRegistryService', () => {
   });
 
   describe('registerNode', () => {
-    it('should create node with generated API key, hash, and audit log', async () => {
+    it('should create node with hash and audit log (no plaintext apiKey column write)', async () => {
       const dto = { name: 'node-ca-01', region: 'ca' };
       const created = {
         id: 'uuid-1',
         ...dto,
-        apiKey: 'generated-key',
         apiKeyHash: 'generated-hash',
         status: 'pending',
       };
@@ -69,17 +68,24 @@ describe('NodeRegistryService', () => {
 
       const result = await service.registerNode(dto, 'admin-te...');
 
-      expect(result).toEqual(created);
-      expect(prisma._tx.node.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      // Response must include the plaintext apiKey (admin needs it once to
+      // hand off to the node operator) — issue #59 contract.
+      expect(result.apiKey).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.apiKeySecretId).toBe('vault-secret-uuid');
+
+      const createCall = prisma._tx.node.create.mock.calls[0][0];
+      expect(createCall.data).toEqual(
+        expect.objectContaining({
           name: 'node-ca-01',
           region: 'ca',
           publicKey: null,
           status: 'pending',
-          apiKey: expect.any(String),
           apiKeyHash: expect.any(String),
         }),
-      });
+      );
+      // Critical: plaintext apiKey must NOT be written to the row.
+      expect(createCall.data).not.toHaveProperty('apiKey');
+
       expect(prisma._tx.nodeAuditLog.create).toHaveBeenCalledWith({
         data: {
           nodeId: 'uuid-1',
@@ -94,7 +100,6 @@ describe('NodeRegistryService', () => {
       prisma._tx.node.create.mockResolvedValue({
         id: 'uuid-1',
         name: 'node-ca-01',
-        apiKey: 'gen-key',
       });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
       prisma.node.update.mockResolvedValue({});
@@ -124,7 +129,7 @@ describe('NodeRegistryService', () => {
       });
     });
 
-    it('should handle Vault failure gracefully', async () => {
+    it('should still return plaintext apiKey when Vault write fails', async () => {
       const dto = { name: 'node-ca-01', region: 'ca' };
       prisma._tx.node.create.mockResolvedValue({
         id: 'uuid-1',
@@ -133,30 +138,33 @@ describe('NodeRegistryService', () => {
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
       vault.createSecret.mockRejectedValue(new Error('Vault unavailable'));
 
-      // Should not throw
+      // Should not throw — Vault failure is non-fatal for registration
       const result = await service.registerNode(dto, 'admin...');
-      expect(result).toBeDefined();
+
+      // Plaintext key must still come back so the operator isn't stranded.
+      // Bearer auth still works via apiKeyHash; HMAC will be unavailable until
+      // Vault recovers (apiKeySecretId remains null).
+      expect(result.apiKey).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.apiKeySecretId).toBeNull();
     });
   });
 
-  describe('generateApiKey', () => {
-    it('should generate a 64-character hex string', async () => {
+  describe('generated API key', () => {
+    it('returns a 64-character hex string in the response', async () => {
       const dto = { name: 'node-key-test', region: 'ca' };
       prisma._tx.node.create.mockResolvedValue({
         id: '1',
         ...dto,
-        apiKey: '',
         status: 'pending',
       });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
 
-      await service.registerNode(dto, 'admin...');
+      const result = await service.registerNode(dto, 'admin...');
 
-      const createCall = prisma._tx.node.create.mock.calls[0][0];
-      expect(createCall.data.apiKey).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.apiKey).toMatch(/^[a-f0-9]{64}$/);
     });
 
-    it('should generate a valid SHA-256 hash alongside the key', async () => {
+    it('writes a valid SHA-256 hash of the key to the DB', async () => {
       const dto = { name: 'node-hash-test', region: 'ca' };
       prisma._tx.node.create.mockResolvedValue({ id: '1' });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
@@ -167,16 +175,20 @@ describe('NodeRegistryService', () => {
       expect(createCall.data.apiKeyHash).toMatch(/^[a-f0-9]{64}$/);
     });
 
-    it('should generate unique keys on each call', async () => {
+    it('generates unique keys on each call', async () => {
       prisma._tx.node.create.mockResolvedValue({ id: '1' });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
 
-      await service.registerNode({ name: 'a', region: 'ca' }, 'admin...');
-      await service.registerNode({ name: 'b', region: 'ca' }, 'admin...');
+      const r1 = await service.registerNode(
+        { name: 'a', region: 'ca' },
+        'admin...',
+      );
+      const r2 = await service.registerNode(
+        { name: 'b', region: 'ca' },
+        'admin...',
+      );
 
-      const key1 = prisma._tx.node.create.mock.calls[0][0].data.apiKey;
-      const key2 = prisma._tx.node.create.mock.calls[1][0].data.apiKey;
-      expect(key1).not.toBe(key2);
+      expect(r1.apiKey).not.toBe(r2.apiKey);
     });
   });
 
@@ -476,29 +488,31 @@ describe('NodeRegistryService', () => {
   });
 
   describe('rotateApiKey', () => {
-    it('should generate a new API key with hash and create audit log', async () => {
+    it('should flip hash + secretId in a single tx and create audit log (no plaintext column write)', async () => {
       prisma.node.findUnique.mockResolvedValue({
         id: '1',
-        apiKey: 'old-key',
+        name: 'test-node',
         apiKeySecretId: 'old-secret-id',
       });
       prisma._tx.node.update.mockResolvedValue({
         id: '1',
         name: 'test-node',
-        apiKey: 'new-key',
+        apiKeyHash: 'new-hash',
+        apiKeySecretId: 'vault-secret-uuid',
       });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
-      prisma.node.update.mockResolvedValue({});
 
       const result = await service.rotateApiKey('1', 'admin...');
 
-      expect(prisma._tx.node.update).toHaveBeenCalledWith({
-        where: { id: '1' },
-        data: {
-          apiKey: expect.any(String),
-          apiKeyHash: expect.any(String),
-        },
+      const updateCall = prisma._tx.node.update.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: '1' });
+      expect(updateCall.data).toEqual({
+        apiKeyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        apiKeySecretId: 'vault-secret-uuid',
       });
+      // Critical: plaintext apiKey must NOT be written to the row.
+      expect(updateCall.data).not.toHaveProperty('apiKey');
+
       expect(prisma._tx.nodeAuditLog.create).toHaveBeenCalledWith({
         data: {
           nodeId: '1',
@@ -506,30 +520,86 @@ describe('NodeRegistryService', () => {
           performedBy: 'admin...',
         },
       });
-      expect(result.apiKey).toBeDefined();
+
+      // Response includes the new plaintext key for the admin caller.
+      expect(result.apiKey).toMatch(/^[a-f0-9]{64}$/);
     });
 
-    it('should store new key in Vault and delete old secret', async () => {
+    it('should write Vault secret BEFORE running the DB transaction (atomicity)', async () => {
       prisma.node.findUnique.mockResolvedValue({
         id: '1',
-        apiKey: 'old-key',
+        name: 'test-node',
         apiKeySecretId: 'old-secret-id',
       });
-      prisma._tx.node.update.mockResolvedValue({
-        id: '1',
-        name: 'test-node',
-      });
+      prisma._tx.node.update.mockResolvedValue({ id: '1', name: 'test-node' });
       prisma._tx.nodeAuditLog.create.mockResolvedValue({});
-      prisma.node.update.mockResolvedValue({});
+
+      const callOrder: string[] = [];
+      vault.createSecret.mockImplementation(async () => {
+        callOrder.push('vault.createSecret');
+        return 'vault-secret-uuid';
+      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: typeof prisma._tx) => unknown) => {
+          callOrder.push('prisma.$transaction');
+          return cb(prisma._tx);
+        },
+      );
 
       await service.rotateApiKey('1', 'admin...');
 
-      expect(vault.createSecret).toHaveBeenCalledWith(
-        expect.any(String),
-        'node_key_1',
-        expect.stringContaining('rotated'),
-      );
+      expect(callOrder).toEqual(['vault.createSecret', 'prisma.$transaction']);
       expect(vault.deleteSecret).toHaveBeenCalledWith('old-secret-id');
+    });
+
+    it('should leave DB unchanged when Vault.createSecret fails (issue #59 atomicity)', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        name: 'test-node',
+        apiKeySecretId: 'old-secret-id',
+      });
+      vault.createSecret.mockRejectedValue(new Error('Vault unavailable'));
+
+      await expect(service.rotateApiKey('1', 'admin...')).rejects.toThrow(
+        'Vault unavailable',
+      );
+
+      // No DB writes happened — node keeps its previous hash + secretId
+      // and remains authenticatable via both Bearer and HMAC paths.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma._tx.node.update).not.toHaveBeenCalled();
+      expect(prisma._tx.nodeAuditLog.create).not.toHaveBeenCalled();
+      expect(vault.deleteSecret).not.toHaveBeenCalled();
+    });
+
+    it('should not fail rotation when old Vault secret cleanup fails', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        name: 'test-node',
+        apiKeySecretId: 'old-secret-id',
+      });
+      prisma._tx.node.update.mockResolvedValue({ id: '1', name: 'test-node' });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+      vault.deleteSecret.mockRejectedValue(new Error('Vault delete failed'));
+
+      // Cleanup failure is best-effort — rotation still succeeds. Worst case
+      // is an orphaned Vault secret, which ops can reap separately.
+      const result = await service.rotateApiKey('1', 'admin...');
+      expect(result.apiKey).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('should skip old-secret cleanup when previous secretId is null', async () => {
+      prisma.node.findUnique.mockResolvedValue({
+        id: '1',
+        name: 'test-node',
+        apiKeySecretId: null,
+      });
+      prisma._tx.node.update.mockResolvedValue({ id: '1', name: 'test-node' });
+      prisma._tx.nodeAuditLog.create.mockResolvedValue({});
+
+      await service.rotateApiKey('1', 'admin...');
+
+      expect(vault.deleteSecret).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when not found', async () => {

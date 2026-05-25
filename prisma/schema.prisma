@@ -101,7 +101,11 @@ model Node {
   /// Reserved for future node-to-service signature verification (planned follow-on to HMAC auth).
   /// Accepted on register/update but not currently read by any service code. Do not remove.
   publicKey              String?   @map("public_key")
-  apiKey                 String    @unique @map("api_key")
+  /// Deprecated: plaintext key was migrated out in issue #59. Column retained
+  /// nullable to satisfy "additive only" rule; dropped in a follow-up migration
+  /// once this change is deployed and verified. Do not read or write this field
+  /// — Bearer auth uses apiKeyHash, HMAC auth uses apiKeySecretId via Vault.
+  apiKey                 String?   @map("api_key")
   apiKeyHash             String?   @map("api_key_hash")
   apiKeySecretId         String?   @map("api_key_secret_id")
   status                 String    @default("pending") // pending, certified, decertified, expired
@@ -115,7 +119,6 @@ model Node {
 
   @@index([region])
   @@index([status])
-  @@index([apiKey])
   @@index([apiKeyHash])
   @@map("nodes")
 }
