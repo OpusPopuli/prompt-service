@@ -25,6 +25,7 @@ import { VerifyPromptDto } from './dto/verify-prompt.dto';
 import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 import { BillExtractionDto } from './dto/bill-extraction.dto';
 import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
+import { BillAnalysisDto } from './dto/bill-analysis.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -151,6 +152,24 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillVotesExtractionPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('bill-analysis')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      'Get bill-analysis prompt. The LLM is instructed to emit a structured plain-English summary of a legislative bill (plainEnglishSummary, topics[], whoItAffects[], fiscalImpact, stakeholderImpact) for the personalization pipeline. See OpusPopuli/opuspopuli#740 / #741.',
+  })
+  @ApiPromptResponses()
+  async billAnalysis(
+    @Body() dto: BillAnalysisDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillAnalysisPrompt(
       dto,
       req.apiKey,
       req.region,
