@@ -750,6 +750,161 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getBillRelevanceExplanationPrompt', () => {
+    // The descriptor's buildVariables has 8 optional-field branches —
+    // every conditional ternary affects coverage. The "all populated"
+    // + "all optional absent" pair covers both legs of each branch.
+    const RELEVANCE_TEMPLATE = {
+      id: '1',
+      name: 'bill-relevance-explanation',
+      templateText: [
+        'Region: {{REGION_ID}}',
+        'Bill: {{BILL_NUMBER}}',
+        'Session: {{SESSION_YEAR}}',
+        'Title: {{TITLE}}',
+        'Bill topics: {{BILL_TOPICS}}',
+        'Bill affects: {{BILL_WHO_IT_AFFECTS}}',
+        '{{FISCAL_IMPACT_LINE}}{{STAKEHOLDER_IMPACT_LINE}}{{BILL_SECTION_HINT_LINE}}',
+        'User-declared interests (topic slugs): {{USER_INTEREST_TAGS}}',
+        'User-declared life-context flags (TRUE-only): {{USER_RANKING_FLAGS}}',
+        '{{USER_REGION_LINE}}',
+        '{{PLAIN_ENGLISH_SUMMARY_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with all optional fields populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(RELEVANCE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          billNumber: 'AB 1',
+          sessionYear: '2025-2026',
+          title: 'ADU fee cap.',
+          plainEnglishSummary: 'Caps ADU fees at $1000.',
+          topics: ['housing'],
+          whoItAffects: ['homeowners'],
+          fiscalImpactLevel: 'low',
+          fiscalImpactSummary: 'Negligible state cost.',
+          stakeholderImpact: 'Homeowners benefit.',
+          billSectionHint: 'Section 12345',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isHomeowner'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain('Bill: AB 1');
+      expect(result.promptText).toContain('Bill topics: housing');
+      expect(result.promptText).toContain('Bill affects: homeowners');
+      expect(result.promptText).toContain(
+        'Fiscal impact: low — Negligible state cost.',
+      );
+      expect(result.promptText).toContain(
+        'Stakeholder impact: Homeowners benefit.',
+      );
+      expect(result.promptText).toContain(
+        'Suggested section to cite: Section 12345',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): housing',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): isHomeowner',
+      );
+      expect(result.promptText).toContain('Approximate region: 94xxx');
+      expect(result.promptText).toContain('Caps ADU fees at $1000.');
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('renders cleanly with every optional field absent — empty arrays + no fiscal data', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(RELEVANCE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          billNumber: 'AB 99',
+          sessionYear: '2025-2026',
+          title: 'Misc.',
+          plainEnglishSummary: 'Something.',
+          topics: [],
+          whoItAffects: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('Fiscal impact:');
+      expect(result.promptText).not.toContain('Stakeholder impact:');
+      expect(result.promptText).not.toContain('Suggested section to cite:');
+      expect(result.promptText).not.toContain('Approximate region:');
+      expect(result.promptText).toContain('Bill affects: none');
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): none',
+      );
+    });
+
+    it('renders fiscal-impact level alone when summary is omitted', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(RELEVANCE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          billNumber: 'AB 1',
+          sessionYear: '2025-2026',
+          title: 'X',
+          plainEnglishSummary: 'Y.',
+          topics: ['housing'],
+          whoItAffects: ['renters'],
+          fiscalImpactLevel: 'high',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Fiscal impact: high\n');
+      expect(result.promptText).not.toContain('Fiscal impact: high —');
+    });
+
+    it('throws NotFoundException when bill-relevance-explanation template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getBillRelevanceExplanationPrompt(
+          {
+            regionId: 'california',
+            billNumber: 'AB 1',
+            sessionYear: '2025-2026',
+            title: 'X',
+            plainEnglishSummary: 'Y.',
+            topics: [],
+            whoItAffects: [],
+            userInterestTags: [],
+            userRankingFlags: [],
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getStructuralAnalysisPrompt — CATEGORY formatting', () => {
     function makeTemplates(baseText: string) {
       const base = {
