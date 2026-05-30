@@ -26,6 +26,7 @@ import { CivicsExtractionDto } from './dto/civics-extraction.dto';
 import { BillExtractionDto } from './dto/bill-extraction.dto';
 import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 import { BillAnalysisDto } from './dto/bill-analysis.dto';
+import { BillRelevanceExplanationDto } from './dto/bill-relevance-explanation.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -170,6 +171,24 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillAnalysisPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('bill-relevance-explanation')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      "Get bill-relevance-explanation prompt. The LLM is instructed to emit ONE sentence (15-30 words) explaining why a specific bill is relevant to a specific user, citing a bill provision + 2-4 of the user's declared signals — or `{ skip: true }` if no defensible narrative is possible under planning-doc §5.3 constraints. Consumed by opuspopuli#745. See OpusPopuli/opuspopuli#740 / #745.",
+  })
+  @ApiPromptResponses()
+  async billRelevanceExplanation(
+    @Body() dto: BillRelevanceExplanationDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillRelevanceExplanationPrompt(
       dto,
       req.apiKey,
       req.region,
