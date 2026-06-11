@@ -905,6 +905,124 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getBillStatusSummaryPrompt', () => {
+    // The descriptor has 2 optional-field branches (PRIOR_STATUS_LINE,
+    // PRIOR_STAGE_LINE). The "all populated" + "all absent" pair covers
+    // both legs of each ternary. The taxonomy-rendering also gets exercised
+    // through the LIFECYCLE_STAGES_BLOCK placeholder.
+    const STATUS_SUMMARY_TEMPLATE = {
+      id: '1',
+      name: 'bill-status-summary',
+      templateText: [
+        'Region: {{REGION_ID}}',
+        'Bill: {{BILL_NUMBER}}',
+        'Session: {{SESSION_YEAR}}',
+        'Title: {{TITLE}}',
+        '{{PRIOR_STATUS_LINE}}{{PRIOR_STAGE_LINE}}',
+        'Stages:\n{{LIFECYCLE_STAGES_BLOCK}}',
+        'HTML:\n{{HTML}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    const STAGES = [
+      {
+        id: 'in_committee',
+        name: 'In Committee',
+        description: 'Bill is referred to a policy committee.',
+      },
+      {
+        id: 'passed_first_chamber',
+        name: 'Passed First Chamber',
+        description: 'Bill cleared its house of origin.',
+      },
+    ];
+
+    it('renders the prompt with prior status + prior stage both populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(
+        STATUS_SUMMARY_TEMPLATE,
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillStatusSummaryPrompt(
+        {
+          regionId: 'california',
+          billNumber: 'AB 1',
+          sessionYear: '2025-2026',
+          title: 'ADU fee cap.',
+          html: '<html>Bill body</html>',
+          lifecycleStages: STAGES,
+          priorStatus: 'Senate - Held in Committee',
+          priorStage: 'in_committee',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain('Bill: AB 1');
+      expect(result.promptText).toContain(
+        'Prior known status: Senate - Held in Committee',
+      );
+      expect(result.promptText).toContain('Prior known stage: in_committee');
+      // Taxonomy renders with id + name + description per line
+      expect(result.promptText).toContain(
+        '- id: "in_committee" — In Committee: Bill is referred to a policy committee.',
+      );
+      expect(result.promptText).toContain(
+        '- id: "passed_first_chamber" — Passed First Chamber: Bill cleared its house of origin.',
+      );
+      expect(result.promptText).toContain('HTML:\n<html>Bill body</html>');
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('renders cleanly when prior status + prior stage are absent (first ingest)', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(
+        STATUS_SUMMARY_TEMPLATE,
+      );
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBillStatusSummaryPrompt(
+        {
+          regionId: 'california',
+          billNumber: 'AB 99',
+          sessionYear: '2025-2026',
+          title: 'Misc.',
+          html: '<html/>',
+          lifecycleStages: STAGES,
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('Prior known status:');
+      expect(result.promptText).not.toContain('Prior known stage:');
+      // Taxonomy still renders even on first ingest
+      expect(result.promptText).toContain('- id: "in_committee"');
+    });
+
+    it('throws NotFoundException when bill-status-summary template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getBillStatusSummaryPrompt(
+          {
+            regionId: 'california',
+            billNumber: 'AB 1',
+            sessionYear: '2025-2026',
+            title: 'X',
+            html: '<html/>',
+            lifecycleStages: STAGES,
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getStructuralAnalysisPrompt — CATEGORY formatting', () => {
     function makeTemplates(baseText: string) {
       const base = {
