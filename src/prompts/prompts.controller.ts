@@ -27,6 +27,7 @@ import { BillExtractionDto } from './dto/bill-extraction.dto';
 import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 import { BillAnalysisDto } from './dto/bill-analysis.dto';
 import { BillRelevanceExplanationDto } from './dto/bill-relevance-explanation.dto';
+import { BillStatusSummaryDto } from './dto/bill-status-summary.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -189,6 +190,24 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillRelevanceExplanationPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('bill-status-summary')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      "Get bill-status-summary prompt. The LLM is instructed to emit ONE structured object combining (a) verbatim status + classified lifecycle stage from the region's taxonomy + last-action + changed flag, (b) plain-English summary with controlled-vocab topics/whoItAffects/fiscalImpact/stakeholderImpact, and (c) a `{ skip: true }` sentinel for non-bills. Replaces two prior LLM calls + the 92%-miss pattern matcher. See OpusPopuli/opuspopuli#823.",
+  })
+  @ApiPromptResponses()
+  async billStatusSummary(
+    @Body() dto: BillStatusSummaryDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBillStatusSummaryPrompt(
       dto,
       req.apiKey,
       req.region,
