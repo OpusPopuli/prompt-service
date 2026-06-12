@@ -1023,6 +1023,530 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getPropositionRelevanceExplanationPrompt', () => {
+    // 8 optional-field branches in buildVariables — the "all populated"
+    // + "all absent" pair covers both legs of each ternary, plus a
+    // targeted fiscal-level-without-summary test for the partial branch.
+    const PROPOSITION_TEMPLATE = {
+      id: '1',
+      name: 'proposition-relevance-explanation',
+      templateText: [
+        'Region: {{REGION_ID}}',
+        'Proposition: {{PROPOSITION_NUMBER}}',
+        'Election date: {{ELECTION_DATE}}',
+        'Title: {{TITLE}}',
+        'Proposition topics: {{PROP_TOPICS}}',
+        'Proposition affects: {{PROP_WHO_IT_AFFECTS}}',
+        '{{FISCAL_IMPACT_LINE}}{{STAKEHOLDER_IMPACT_LINE}}{{PROVISION_HINT_LINE}}',
+        'User-declared interests (topic slugs): {{USER_INTEREST_TAGS}}',
+        'User-declared life-context flags (TRUE-only): {{USER_RANKING_FLAGS}}',
+        '{{USER_REGION_LINE}}',
+        '{{PLAIN_ENGLISH_SUMMARY_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with all optional fields populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(PROPOSITION_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPropositionRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          propositionNumber: 'Measure J',
+          electionDate: '2026-11-03',
+          title: 'Rent Control Expansion Act.',
+          plainEnglishSummary: 'Expands rent control to post-1995 buildings.',
+          topics: ['housing'],
+          whoItAffects: ['renters'],
+          fiscalImpactLevel: 'medium',
+          fiscalImpactSummary: '$50M annual cost.',
+          stakeholderImpact: 'Renters gain, landlords lose flexibility.',
+          provisionHint: 'expands rent control to post-1995 buildings',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain('Proposition: Measure J');
+      expect(result.promptText).toContain('Election date: 2026-11-03');
+      expect(result.promptText).toContain('Proposition topics: housing');
+      expect(result.promptText).toContain('Proposition affects: renters');
+      expect(result.promptText).toContain(
+        'Fiscal impact: medium — $50M annual cost.',
+      );
+      expect(result.promptText).toContain(
+        'Stakeholder impact: Renters gain, landlords lose flexibility.',
+      );
+      expect(result.promptText).toContain(
+        'Suggested provision to cite: expands rent control to post-1995 buildings',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): housing',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): isRenter',
+      );
+      expect(result.promptText).toContain('Approximate region: 94xxx');
+      expect(result.promptText).toContain(
+        'Expands rent control to post-1995 buildings.',
+      );
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('renders cleanly with every optional field absent — empty arrays + no fiscal data', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(PROPOSITION_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPropositionRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          propositionNumber: 'Measure Z',
+          electionDate: '2026-11-03',
+          title: 'Misc.',
+          plainEnglishSummary: 'Something.',
+          topics: [],
+          whoItAffects: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('Fiscal impact:');
+      expect(result.promptText).not.toContain('Stakeholder impact:');
+      expect(result.promptText).not.toContain('Suggested provision to cite:');
+      expect(result.promptText).not.toContain('Approximate region:');
+      expect(result.promptText).toContain('Proposition affects: none');
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): none',
+      );
+    });
+
+    it('renders fiscal-impact level alone when summary is omitted', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(PROPOSITION_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPropositionRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          propositionNumber: 'Measure J',
+          electionDate: '2026-11-03',
+          title: 'X',
+          plainEnglishSummary: 'Y.',
+          topics: ['housing'],
+          whoItAffects: ['renters'],
+          fiscalImpactLevel: 'high',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Fiscal impact: high\n');
+      expect(result.promptText).not.toContain('Fiscal impact: high —');
+    });
+
+    it('throws NotFoundException when proposition-relevance-explanation template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPropositionRelevanceExplanationPrompt(
+          {
+            regionId: 'california',
+            propositionNumber: 'Measure J',
+            electionDate: '2026-11-03',
+            title: 'X',
+            plainEnglishSummary: 'Y.',
+            topics: [],
+            whoItAffects: [],
+            userInterestTags: [],
+            userRankingFlags: [],
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getRepresentativeRelevanceExplanationPrompt', () => {
+    // 8 optional-field branches — covered by all-populated + all-absent
+    // pair, plus a targeted "party + region but no action / event" test
+    // for the partial branch combination.
+    const REP_TEMPLATE = {
+      id: '1',
+      name: 'representative-relevance-explanation',
+      templateText: [
+        'Region: {{REGION_ID}}',
+        'Representative: {{REP_NAME}}',
+        'Office: {{OFFICE_TITLE}}',
+        'Jurisdiction scope: {{JURISDICTION}}',
+        '{{PARTY_LINE}}Topics of focus this session: {{TOPICS_OF_FOCUS}}',
+        'Current committee memberships: {{COMMITTEE_MEMBERSHIPS}}',
+        '{{RECENT_ACTION_LINE}}{{UPCOMING_EVENT_LINE}}User-declared interests (topic slugs): {{USER_INTEREST_TAGS}}',
+        'User-declared life-context flags (TRUE-only): {{USER_RANKING_FLAGS}}',
+        '{{USER_REGION_LINE}}',
+        '{{MANDATE_SUMMARY_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with all optional fields populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(REP_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getRepresentativeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          repName: 'Rep. Zoe Lofgren',
+          officeTitle: 'U.S. House CA-18',
+          jurisdiction: 'federal',
+          party: 'democrat',
+          mandateSummary: 'Represents CA-18 in the U.S. House.',
+          topicsOfFocus: ['housing'],
+          committeeMemberships: ['Assembly Housing Committee'],
+          recentLegislativeAction: 'Voted for HR 4821 on tenant protections.',
+          upcomingEvent: 'Town hall 2026-06-28 in San Jose.',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain('Representative: Rep. Zoe Lofgren');
+      expect(result.promptText).toContain('Office: U.S. House CA-18');
+      expect(result.promptText).toContain('Jurisdiction scope: federal');
+      expect(result.promptText).toContain('Party (informational): democrat');
+      expect(result.promptText).toContain(
+        'Topics of focus this session: housing',
+      );
+      expect(result.promptText).toContain(
+        'Current committee memberships: Assembly Housing Committee',
+      );
+      expect(result.promptText).toContain(
+        'Most recent legislative action: Voted for HR 4821 on tenant protections.',
+      );
+      expect(result.promptText).toContain(
+        'Upcoming event: Town hall 2026-06-28 in San Jose.',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): housing',
+      );
+      expect(result.promptText).toContain('Approximate region: 94xxx');
+      expect(result.promptText).toContain(
+        'Represents CA-18 in the U.S. House.',
+      );
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('renders cleanly with every optional field absent — empty arrays + no party / action / event', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(REP_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getRepresentativeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          repName: 'Rep. Jane Doe',
+          officeTitle: 'State Senate D-15',
+          jurisdiction: 'state',
+          mandateSummary: 'Represents District 15.',
+          topicsOfFocus: [],
+          committeeMemberships: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('Party (informational):');
+      expect(result.promptText).not.toContain(
+        'Most recent legislative action:',
+      );
+      expect(result.promptText).not.toContain('Upcoming event:');
+      expect(result.promptText).not.toContain('Approximate region:');
+      expect(result.promptText).toContain(
+        'Topics of focus this session: none on record',
+      );
+      expect(result.promptText).toContain(
+        'Current committee memberships: none on record',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): none',
+      );
+    });
+
+    it('renders party + region without legislative action or event', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(REP_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getRepresentativeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          repName: 'Rep. Smith',
+          officeTitle: 'U.S. House CA-12',
+          jurisdiction: 'federal',
+          party: 'independent',
+          mandateSummary: 'House district.',
+          topicsOfFocus: ['healthcare'],
+          committeeMemberships: ['Energy and Commerce'],
+          userInterestTags: ['healthcare'],
+          userRankingFlags: [],
+          userRegionLabel: 'alameda-county',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Party (informational): independent');
+      expect(result.promptText).toContain('Approximate region: alameda-county');
+      expect(result.promptText).not.toContain(
+        'Most recent legislative action:',
+      );
+      expect(result.promptText).not.toContain('Upcoming event:');
+    });
+
+    it('throws NotFoundException when representative-relevance-explanation template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getRepresentativeRelevanceExplanationPrompt(
+          {
+            regionId: 'california',
+            repName: 'Rep. X',
+            officeTitle: 'X',
+            jurisdiction: 'federal',
+            mandateSummary: 'X',
+            topicsOfFocus: [],
+            committeeMemberships: [],
+            userInterestTags: [],
+            userRankingFlags: [],
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getCommitteeRelevanceExplanationPrompt', () => {
+    // Branches: COMMITTEE_TYPE_LINE, COMMITTEE_TOPICS (empty fallback),
+    // MEMBERS_ON_USER_SLATE (truthy + length), RECENT_TOPICS_LINE,
+    // UPCOMING_HEARINGS_BLOCK (nested map), USER_*, USER_REGION_LINE.
+    // All-populated + all-absent + multi-hearing covers each.
+    const COMMITTEE_TEMPLATE = {
+      id: '1',
+      name: 'committee-relevance-explanation',
+      templateText: [
+        'Region: {{REGION_ID}}',
+        'Committee: {{COMMITTEE_NAME}}',
+        'Chamber: {{JURISDICTION}}',
+        '{{COMMITTEE_TYPE_LINE}}Committee topics: {{COMMITTEE_TOPICS}}',
+        'Your reps on this committee: {{MEMBERS_ON_USER_SLATE}}',
+        '{{RECENT_TOPICS_LINE}}{{UPCOMING_HEARINGS_BLOCK}}User-declared interests (topic slugs): {{USER_INTEREST_TAGS}}',
+        'User-declared life-context flags (TRUE-only): {{USER_RANKING_FLAGS}}',
+        '{{USER_REGION_LINE}}',
+        '{{MANDATE_SUMMARY_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with all optional fields populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(COMMITTEE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getCommitteeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          committeeName: 'Assembly Judiciary Committee',
+          jurisdiction: 'state_assembly',
+          committeeType: 'standing',
+          mandateSummary: 'Reviews civil and criminal procedure legislation.',
+          topics: ['civil-rights'],
+          membersOnUserSlate: ['Lofgren'],
+          recentBillTopicsTouched: ['housing', 'civil-rights'],
+          upcomingHearings: [
+            { date: '2026-06-28', topic: 'Rent control reform' },
+          ],
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Region: california');
+      expect(result.promptText).toContain(
+        'Committee: Assembly Judiciary Committee',
+      );
+      expect(result.promptText).toContain('Chamber: state_assembly');
+      expect(result.promptText).toContain('Committee type: standing');
+      expect(result.promptText).toContain('Committee topics: civil-rights');
+      expect(result.promptText).toContain(
+        'Your reps on this committee: Lofgren',
+      );
+      expect(result.promptText).toContain(
+        'Recent bill topics touched: housing, civil-rights',
+      );
+      expect(result.promptText).toContain(
+        'Upcoming hearings:\n  - 2026-06-28: Rent control reform',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): housing',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): isRenter',
+      );
+      expect(result.promptText).toContain('Approximate region: 94xxx');
+      expect(result.promptText).toContain(
+        'Reviews civil and criminal procedure legislation.',
+      );
+      expect(result.promptVersion).toBe('v1');
+    });
+
+    it('renders cleanly with every optional field absent — no type / members / topics / hearings / region', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(COMMITTEE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getCommitteeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          committeeName: 'Joint Budget Committee',
+          jurisdiction: 'joint',
+          mandateSummary: 'Joint committee.',
+          topics: [],
+          membersOnUserSlate: [],
+          recentBillTopicsTouched: [],
+          upcomingHearings: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('Committee type:');
+      expect(result.promptText).not.toContain('Recent bill topics touched:');
+      expect(result.promptText).not.toContain('Upcoming hearings:');
+      expect(result.promptText).not.toContain('Approximate region:');
+      expect(result.promptText).toContain('Committee topics: none on record');
+      expect(result.promptText).toContain('Your reps on this committee: none');
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): none',
+      );
+    });
+
+    it('renders multiple upcoming hearings on separate lines', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(COMMITTEE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getCommitteeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          committeeName: 'Housing Committee',
+          jurisdiction: 'state_assembly',
+          mandateSummary: 'Housing.',
+          topics: ['housing'],
+          membersOnUserSlate: [],
+          recentBillTopicsTouched: [],
+          upcomingHearings: [
+            { date: '2026-06-28', topic: 'Rent control' },
+            { date: '2026-07-15', topic: 'ADU regulations' },
+          ],
+          userInterestTags: ['housing'],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('  - 2026-06-28: Rent control');
+      expect(result.promptText).toContain('  - 2026-07-15: ADU regulations');
+    });
+
+    it('throws NotFoundException when committee-relevance-explanation template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getCommitteeRelevanceExplanationPrompt(
+          {
+            regionId: 'california',
+            committeeName: 'X',
+            jurisdiction: 'state_assembly',
+            mandateSummary: 'X',
+            topics: [],
+            membersOnUserSlate: [],
+            recentBillTopicsTouched: [],
+            upcomingHearings: [],
+            userInterestTags: [],
+            userRankingFlags: [],
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('renders multi-line mandateSummary verbatim inside the fenced untrusted block', async () => {
+      // Defense-in-depth: free-text input fields (mandateSummary,
+      // recentLegislativeAction, etc.) can contain newlines. Verify the
+      // descriptor's ```text fence preserves them so the LLM still sees
+      // the full summary even when prose spans multiple paragraphs.
+      prisma.promptTemplate.findFirst.mockResolvedValue(COMMITTEE_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const multiLineSummary =
+        'Reviews civil and criminal procedure legislation.\n\nJurisdiction includes courts, judiciary administration, and judicial selection processes.';
+
+      const result = await service.getCommitteeRelevanceExplanationPrompt(
+        {
+          regionId: 'california',
+          committeeName: 'Assembly Judiciary Committee',
+          jurisdiction: 'state_assembly',
+          mandateSummary: multiLineSummary,
+          topics: ['civil-rights'],
+          membersOnUserSlate: [],
+          recentBillTopicsTouched: [],
+          upcomingHearings: [],
+          userInterestTags: ['civil-rights'],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain(multiLineSummary);
+      expect(result.promptText).toContain(
+        '```text\n' + multiLineSummary + '\n```',
+      );
+    });
+  });
+
   describe('getStructuralAnalysisPrompt — CATEGORY formatting', () => {
     function makeTemplates(baseText: string) {
       const base = {
