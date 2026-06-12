@@ -28,6 +28,9 @@ import { BillVotesExtractionDto } from './dto/bill-votes-extraction.dto';
 import { BillAnalysisDto } from './dto/bill-analysis.dto';
 import { BillRelevanceExplanationDto } from './dto/bill-relevance-explanation.dto';
 import { BillStatusSummaryDto } from './dto/bill-status-summary.dto';
+import { PropositionRelevanceExplanationDto } from './dto/proposition-relevance-explanation.dto';
+import { RepresentativeRelevanceExplanationDto } from './dto/representative-relevance-explanation.dto';
+import { CommitteeRelevanceExplanationDto } from './dto/committee-relevance-explanation.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -208,6 +211,60 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillStatusSummaryPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('proposition-relevance-explanation')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      "Get proposition-relevance-explanation prompt. The LLM is instructed to emit ONE sentence (15-30 words) explaining why a specific ballot proposition is relevant to a specific user, citing a provision + 2-4 of the user's declared signals — or `{ skip: true }` if no defensible narrative is possible under planning-doc §5.3 constraints. Vote recommendations are forbidden. Consumed by opuspopuli#836. See OpusPopuli/opuspopuli#834.",
+  })
+  @ApiPromptResponses()
+  async propositionRelevanceExplanation(
+    @Body() dto: PropositionRelevanceExplanationDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getPropositionRelevanceExplanationPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('representative-relevance-explanation')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      "Get representative-relevance-explanation prompt. The LLM is instructed to emit ONE sentence (15-30 words) explaining why a specific elected representative is the right person to engage with on the user's declared issues, citing ONE jurisdictional anchor (committee/topic/recent action/upcoming event) + 2-4 declared signals — or `{ skip: true }` when no overlap exists. Speculation about beliefs or future votes is forbidden. Consumed by opuspopuli#836. See OpusPopuli/opuspopuli#834.",
+  })
+  @ApiPromptResponses()
+  async representativeRelevanceExplanation(
+    @Body() dto: RepresentativeRelevanceExplanationDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getRepresentativeRelevanceExplanationPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('committee-relevance-explanation')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      'Get committee-relevance-explanation prompt. The LLM is instructed to emit ONE sentence (15-30 words) explaining why a legislative committee is worth knowing about for a specific user, citing ONE anchor (rep on user\'s slate / topic overlap / recent activity / upcoming hearing) + 2-4 declared signals — or `{ skip: true }` when no overlap exists. The strongest anchor when present is "your rep serves on it". Consumed by opuspopuli#836. See OpusPopuli/opuspopuli#834.',
+  })
+  @ApiPromptResponses()
+  async committeeRelevanceExplanation(
+    @Body() dto: CommitteeRelevanceExplanationDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getCommitteeRelevanceExplanationPrompt(
       dto,
       req.apiKey,
       req.region,
