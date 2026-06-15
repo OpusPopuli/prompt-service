@@ -204,7 +204,7 @@ export class PromptsController {
   @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
   @ApiOperation({
     summary:
-      "Get briefing-summary prompt. The LLM is instructed to emit a 2-3 sentence opening paragraph (30-60 words) for the user's `/me/briefing` page — a warm, descriptive narrative companion to the deterministic Phase 1 template. MUST be descriptive (\"here's what's open\"), NEVER persuasive (\"you should\"). Returns `{ paragraph: string }` or `{ skip: true, reason: string }`. Consumed by opuspopuli#849 Phase 2. See OpusPopuli/opuspopuli#849.",
+      'Get briefing-summary prompt. The LLM is instructed to emit a 2-3 sentence opening paragraph (30-60 words) for the user\'s `/me/briefing` page — a warm, descriptive narrative companion to the deterministic Phase 1 template. MUST be descriptive ("here\'s what\'s open"), NEVER persuasive ("you should"). Returns `{ paragraph: string }` or `{ skip: true, reason: string }`. Consumed by opuspopuli#849 Phase 2. See OpusPopuli/opuspopuli#849.',
   })
   @ApiPromptResponses()
   async briefingSummary(

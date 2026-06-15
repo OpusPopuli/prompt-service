@@ -1590,14 +1590,10 @@ describe('PromptsService', () => {
       );
       // The actual name value lands in the fenced untrusted block
       // beneath the SECURITY NOTICE, NOT inline in metadata.
-      expect(result.promptText).toContain(
-        "## User's first name (untrusted",
-      );
+      expect(result.promptText).toContain("## User's first name (untrusted");
       expect(result.promptText).toContain('```text\nRodney\n```');
       expect(result.promptText).toContain('Bills on the briefing: 5');
-      expect(result.promptText).toContain(
-        'Representatives on the briefing: 7',
-      );
+      expect(result.promptText).toContain('Representatives on the briefing: 7');
       expect(result.promptText).toContain('Committees on the briefing: 5');
       expect(result.promptText).toContain('Propositions on the briefing: 1');
       expect(result.promptText).toContain(
