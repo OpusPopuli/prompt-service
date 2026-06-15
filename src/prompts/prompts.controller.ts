@@ -31,6 +31,7 @@ import { BillStatusSummaryDto } from './dto/bill-status-summary.dto';
 import { PropositionRelevanceExplanationDto } from './dto/proposition-relevance-explanation.dto';
 import { RepresentativeRelevanceExplanationDto } from './dto/representative-relevance-explanation.dto';
 import { CommitteeRelevanceExplanationDto } from './dto/committee-relevance-explanation.dto';
+import { BriefingSummaryDto } from './dto/briefing-summary.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -193,6 +194,24 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillRelevanceExplanationPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('briefing-summary')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      "Get briefing-summary prompt. The LLM is instructed to emit a 2-3 sentence opening paragraph (30-60 words) for the user's `/me/briefing` page — a warm, descriptive narrative companion to the deterministic Phase 1 template. MUST be descriptive (\"here's what's open\"), NEVER persuasive (\"you should\"). Returns `{ paragraph: string }` or `{ skip: true, reason: string }`. Consumed by opuspopuli#849 Phase 2. See OpusPopuli/opuspopuli#849.",
+  })
+  @ApiPromptResponses()
+  async briefingSummary(
+    @Body() dto: BriefingSummaryDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getBriefingSummaryPrompt(
       dto,
       req.apiKey,
       req.region,
