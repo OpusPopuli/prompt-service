@@ -103,7 +103,7 @@ export class BriefingSummaryDto {
 
   @ApiProperty({
     description:
-      "Top-ranking axis on the highest-scoring bill — lets the LLM frame the stake of the top match (money/rights/services for `directMaterial`, topic alignment for `valuesAlignment`, time-sensitivity for `actionability`). Callers MUST omit this field when no bills exist; the rendered prompt receives the literal string `none` in that case. Sending the literal string `none` as the field value is rejected by the IsIn validator.",
+      'Top-ranking axis on the highest-scoring bill — lets the LLM frame the stake of the top match (money/rights/services for `directMaterial`, topic alignment for `valuesAlignment`, time-sensitivity for `actionability`). Callers MUST omit this field when no bills exist; the rendered prompt receives the literal string `none` in that case. Sending the literal string `none` as the field value is rejected by the IsIn validator.',
     enum: ['directMaterial', 'valuesAlignment', 'actionability'],
     required: false,
   })
