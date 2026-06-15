@@ -1547,6 +1547,220 @@ describe('PromptsService', () => {
     });
   });
 
+  describe('getBriefingSummaryPrompt', () => {
+    const BRIEFING_TEMPLATE = {
+      id: '1',
+      name: 'briefing-summary',
+      templateText: [
+        'Output language: {{LANGUAGE}} ({{LANGUAGE_CODE}})',
+        '{{FIRST_NAME_AVAILABILITY_LINE}}Bills on the briefing: {{BILL_COUNT}}',
+        'Representatives on the briefing: {{REP_COUNT}}',
+        'Committees on the briefing: {{COMMITTEE_COUNT}}',
+        'Propositions on the briefing: {{PROPOSITION_COUNT}}',
+        'Bills with a vote / comment window in the next ~30 days: {{URGENT_BILL_COUNT}}',
+        "Top-ranked bill's strongest scoring axis: {{TOP_BILL_TOP_AXIS}}",
+        '{{FIRST_NAME_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with a first name + EN language + all counts populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'en',
+          firstName: 'Rodney',
+          billCount: 5,
+          repCount: 7,
+          committeeCount: 5,
+          propositionCount: 1,
+          urgentBillCount: 3,
+          topBillTopAxis: 'directMaterial',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Output language: English (en)');
+      expect(result.promptText).toContain(
+        'A first name has been provided — see the untrusted block below.',
+      );
+      // The actual name value lands in the fenced untrusted block
+      // beneath the SECURITY NOTICE, NOT inline in metadata.
+      expect(result.promptText).toContain(
+        "## User's first name (untrusted",
+      );
+      expect(result.promptText).toContain('```text\nRodney\n```');
+      expect(result.promptText).toContain('Bills on the briefing: 5');
+      expect(result.promptText).toContain(
+        'Representatives on the briefing: 7',
+      );
+      expect(result.promptText).toContain('Committees on the briefing: 5');
+      expect(result.promptText).toContain('Propositions on the briefing: 1');
+      expect(result.promptText).toContain(
+        'Bills with a vote / comment window in the next ~30 days: 3',
+      );
+      expect(result.promptText).toContain(
+        "Top-ranked bill's strongest scoring axis: directMaterial",
+      );
+    });
+
+    it('uses the no-name register when firstName is omitted', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'en',
+          billCount: 0,
+          repCount: 0,
+          committeeCount: 0,
+          propositionCount: 0,
+          urgentBillCount: 0,
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain(
+        'No first name has been provided; use the no-name register',
+      );
+      // The untrusted block is omitted entirely (not even an empty
+      // fence) when no name was supplied.
+      expect(result.promptText).not.toContain("User's first name (untrusted");
+      // TOP_BILL_TOP_AXIS defaults to "none" when omitted so the LLM
+      // can pick the right skip-or-quiet branch.
+      expect(result.promptText).toContain(
+        "Top-ranked bill's strongest scoring axis: none",
+      );
+    });
+
+    it('trims whitespace-only firstName and falls through to the no-name register', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'en',
+          firstName: '   ',
+          billCount: 1,
+          repCount: 1,
+          committeeCount: 1,
+          propositionCount: 1,
+          urgentBillCount: 0,
+        },
+        'test-key',
+        'ca',
+      );
+
+      // Whitespace-only first name must NOT smuggle a "name shared"
+      // signal past the trust boundary — the rendered prompt should
+      // use the no-name register and never emit a fenced empty name.
+      expect(result.promptText).toContain(
+        'No first name has been provided; use the no-name register',
+      );
+      expect(result.promptText).not.toContain("User's first name (untrusted");
+    });
+
+    it('trims a name with surrounding whitespace and emits the trimmed value in the untrusted block', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'en',
+          firstName: '  Rodney  ',
+          billCount: 1,
+          repCount: 1,
+          committeeCount: 1,
+          propositionCount: 1,
+          urgentBillCount: 0,
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('```text\nRodney\n```');
+      // No leading/trailing whitespace inside the fenced block.
+      expect(result.promptText).not.toContain('  Rodney  ');
+    });
+
+    it('emits Spanish language label when language=es', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'es',
+          firstName: 'Rodney',
+          billCount: 3,
+          repCount: 5,
+          committeeCount: 2,
+          propositionCount: 1,
+          urgentBillCount: 2,
+          topBillTopAxis: 'actionability',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Output language: Spanish (es)');
+      expect(result.promptText).toContain(
+        "Top-ranked bill's strongest scoring axis: actionability",
+      );
+    });
+
+    it('renders TOP_BILL_TOP_AXIS as "none" when topBillTopAxis is omitted', async () => {
+      // Pins the implicit default — callers MUST omit the field when
+      // no top bill exists, and the descriptor MUST render the literal
+      // string "none" in that case so the LLM picks the quiet branch
+      // (per the prompt's instructions for the `none` value).
+      prisma.promptTemplate.findFirst.mockResolvedValue(BRIEFING_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getBriefingSummaryPrompt(
+        {
+          language: 'en',
+          firstName: 'Rodney',
+          billCount: 0,
+          repCount: 2,
+          committeeCount: 0,
+          propositionCount: 0,
+          urgentBillCount: 0,
+          // topBillTopAxis omitted intentionally
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain(
+        "Top-ranked bill's strongest scoring axis: none",
+      );
+    });
+
+    it('throws NotFoundException when the template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getBriefingSummaryPrompt(
+          {
+            language: 'en',
+            billCount: 1,
+            repCount: 1,
+            committeeCount: 1,
+            propositionCount: 1,
+            urgentBillCount: 0,
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getStructuralAnalysisPrompt — CATEGORY formatting', () => {
     function makeTemplates(baseText: string) {
       const base = {
