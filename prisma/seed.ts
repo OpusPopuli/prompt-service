@@ -2055,7 +2055,7 @@ Self-check before output:
     name: 'committee-relevance-explanation',
     category: 'committee_relevance',
     description:
-      'One-sentence personalized "why this committee matters to you" narrative for a legislative committee, given the committee\'s structured jurisdictional facts (including which of the user\'s reps sit on it) + the user\'s anonymized declared signals. Output is the trust layer of the Committees Briefing section (opuspopuli#770 / #836 / #837). Consumed by the nightly batch job that caches `relevanceExplanation` per user/committee. See OpusPopuli/opuspopuli#834.',
+      "One-sentence personalized \"why this committee matters to you\" narrative for a legislative committee, given the committee's structured jurisdictional facts (including which of the user's reps sit on it) + the user's anonymized declared signals. Output is the trust layer of the Committees Briefing section (opuspopuli#770 / #836 / #837). Consumed by the nightly batch job that caches `relevanceExplanation` per user/committee. See OpusPopuli/opuspopuli#834.",
     variables: [
       'REGION_ID',
       'COMMITTEE_NAME',
