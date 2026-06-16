@@ -216,11 +216,31 @@ prompt-service/
 │   └── main.ts                # Bootstrap + Swagger setup
 ├── postman/                   # Postman collection & environment
 ├── test/integration/          # Docker-based integration tests
-├── docker-compose.yml         # Local dev stack
+├── docker-compose.yml         # Local dev stack (builds from source)
 ├── docker-compose-integration.yml  # Integration test stack
-├── Dockerfile                 # Production image
-└── .github/workflows/ci.yml   # GitHub Actions CI
+├── docker-compose-prod.yml    # Production overlay (pulls ghcr.io/opuspopuli/prompt-service)
+├── Dockerfile                 # Production image (built by .github/workflows/release.yml)
+└── .github/workflows/
+    ├── ci.yml                 # PR lint + test
+    ├── release.yml            # Build + cosign sign + SBOM + push to ghcr.io on push to main
+    └── validate-main-pr.yml   # Pre-merge gate for main
 ```
+
+## Deployment
+
+Production images publish to `ghcr.io/opuspopuli/prompt-service` on push to `main` (cosign-signed with Sigstore keyless, SBOM attested). On the Mac Studio:
+
+```bash
+docker compose -f docker-compose-prod.yml pull
+docker compose -f docker-compose-prod.yml up -d
+```
+
+Pin a specific build for rollback:
+```bash
+TAG=sha-abc1234 docker compose -f docker-compose-prod.yml up -d
+```
+
+For local dev with hot reload, use `docker-compose.yml` (builds from source) or `pnpm start:dev` (no Docker).
 
 ## Prompt Templates
 
