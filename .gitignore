@@ -6,4 +6,4 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 
-.claude
+.claude/worktrees/
