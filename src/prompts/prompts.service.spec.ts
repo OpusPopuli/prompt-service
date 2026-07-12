@@ -334,6 +334,65 @@ describe('PromptsService', () => {
 
       expect(result.promptText).toBe('END');
     });
+
+    it('selects the civics-extraction-compact template when compact=true (#92)', async () => {
+      const template = {
+        id: '2',
+        name: 'civics-extraction-compact',
+        templateText: 'compact {{HTML}}',
+        version: 3,
+        isActive: true,
+      };
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getCivicsExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl: 'https://example.com',
+          contentGoal: 'extract',
+          html: '<p/>',
+          compact: true,
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(prisma.promptTemplate.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { name: 'civics-extraction-compact', isActive: true },
+        }),
+      );
+    });
+
+    it('selects the full civics-extraction template when compact is absent (#92)', async () => {
+      const template = {
+        id: '1',
+        name: 'civics-extraction',
+        templateText: 'full {{HTML}}',
+        version: 1,
+        isActive: true,
+      };
+      prisma.promptTemplate.findFirst.mockResolvedValue(template);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      await service.getCivicsExtractionPrompt(
+        {
+          regionId: 'california',
+          sourceUrl: 'https://example.com',
+          contentGoal: 'extract',
+          html: '<p/>',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(prisma.promptTemplate.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { name: 'civics-extraction', isActive: true },
+        }),
+      );
+    });
   });
 
   describe('getBillExtractionPrompt', () => {
