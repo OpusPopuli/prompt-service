@@ -175,7 +175,11 @@ export class PromptsService implements OnModuleInit {
 
     civicsExtraction: {
       endpoint: 'civics-extraction',
-      resolveTemplateName: () => 'civics-extraction',
+      // Compact bulk extraction uses a verbatim-only variant that ~halves
+      // output tokens; distinct template ⇒ distinct promptHash for provenance
+      // (opuspopuli#873). See opuspopuli#92.
+      resolveTemplateName: (dto: CivicsExtractionDto) =>
+        dto.compact ? 'civics-extraction-compact' : 'civics-extraction',
       buildVariables: (dto: CivicsExtractionDto) => ({
         REGION_ID: dto.regionId,
         SOURCE_URL: dto.sourceUrl,

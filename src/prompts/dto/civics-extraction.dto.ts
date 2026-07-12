@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 
 /**
  * Request body for the civics-extraction prompt — the LLM is
@@ -54,4 +54,17 @@ export class CivicsExtractionDto {
   })
   @IsString()
   html: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Compact mode for bulk extraction — instructs the model to emit ' +
+      'verbatim-only CivicText (omitting the plain-language rewrite on every ' +
+      'field), roughly halving output tokens. The consumer fills plainLanguage ' +
+      'from verbatim (or a later pass). Defaults to false (full dual-text). ' +
+      'Selects the `civics-extraction-compact` template. See opuspopuli#92.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  compact?: boolean;
 }
