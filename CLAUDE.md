@@ -97,3 +97,7 @@ Experiments in the `experiments` table test prompt variants against a control. T
 - Prompt template *text* lives here (private).
 - Prompt *types and parameters* (interfaces, method signatures) are defined in `@opuspopuli/prompt-client/src/types.ts` (public).
 - When adding a new prompt type: define the parameter interface in `prompt-client` first, then implement the template here. Keep the two in sync.
+
+## SDLC tooling
+
+Org-wide `op-*` workflow commands (`/op-review`, `/op-release`, `/op-issue-plan`, …) come from the shared **[opuspopuli-sdlc](https://github.com/OpusPopuli/opuspopuli-sdlc)** Claude Code plugin, auto-enabled via the committed `.claude/settings.json` (trust the repo folder once).
