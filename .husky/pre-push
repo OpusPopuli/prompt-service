@@ -5,11 +5,24 @@
 # duplicate-code scan, audit and AI review passes, followed by a server
 # rejection. Matters more under trunk-based: main is now the only long-lived
 # branch, so it is the one you are most likely sitting on.
-if [ "$(git branch --show-current)" = "main" ]; then
-  printf '\nPush blocked: direct pushes to main are not allowed.\n'
-  printf 'Cut a branch and open a pull request instead.\n'
-  exit 1
-fi
+# Reads the refs actually being pushed from stdin rather than checking which
+# branch you are standing on. `git push origin v0.2.0` pushes a TAG while you
+# happen to be on main, and the branch-name check rejected it — which blocks
+# releasing, since under tag-triggered releases the tag IS the deploy.
+#
+# git feeds pre-push one line per ref: <local-ref> <local-sha> <remote-ref>
+# <remote-sha>. Only refs/heads/main is a direct push to main. Nothing below
+# reads stdin, so consuming it here is safe.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      printf '\nPush blocked: direct pushes to main are not allowed.\n'
+      printf 'Cut a branch and open a pull request instead.\n'
+      printf '(Tags are fine: `git push origin v1.2.3` is how a release ships.)\n'
+      exit 1
+      ;;
+  esac
+done
 
 # ── 1. Coverage gate ─────────────────────────────────────────────────────────
 echo "Running tests with coverage..."
