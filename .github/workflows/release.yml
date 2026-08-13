@@ -2,9 +2,21 @@
 # Release — Build, Push, Sign & SBOM
 # =============================================================================
 #
-# Triggered on push to main (after CI passes). Builds the prompt-service Docker
-# image, pushes to GHCR, signs with Sigstore keyless cosign, and generates +
-# attaches an SPDX SBOM.
+# Triggered by pushing a `v*` tag. Builds the prompt-service Docker image,
+# pushes to GHCR, signs with Sigstore keyless cosign, and generates + attaches
+# an SPDX SBOM.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Tag-triggered rather than push-to-main. Under trunk-based development every
+# feature lands on main, so a branches:[main] trigger would publish `:latest` on
+# every merge — turning a routine merge into a production image with no
+# deliberate step in between.
+#
+# It also gives this repo a release record it has never had: no git tag and no
+# GitHub Release has ever existed here, and package.json still reads 0.1.0.
+# Releases were plain develop→main merges, so there was nothing to point at when
+# asking what shipped. Now the tag IS the release.
 #
 # Matches the opuspopuli monorepo release.yml shape so verification tooling and
 # pinned action SHAs are consistent across repos.
@@ -14,7 +26,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -61,6 +73,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/prompt-service
           tags: |
+            # v0.2.0 -> 0.2.0. Gives the image a version matching the git tag,
+            # so "what is running" is answerable from the image alone — which
+            # it has never been in this repo.
+            type=semver,pattern={{version}}
             type=sha,prefix=sha-
             type=raw,value=latest
 
