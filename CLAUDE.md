@@ -19,10 +19,23 @@ pnpm db:studio          # Open Prisma Studio
 
 ## Git workflow
 
-- **Base branch**: `develop`. All feature/fix branches cut from `develop`, PR back to `develop`.
-- **`main`** is production-only. Promote via a release PR (`develop → main`).
-- Never push directly to `develop` or `main`.
+**Trunk-based.** `main` is the only long-lived branch; there is no `develop`.
+
+- **Base branch**: `main`. Cut short-lived branches from `main`, PR back to `main`.
+- Never push directly to `main` — a repository ruleset rejects it, with no bypass for admins.
 - Branch naming: `feat/<short-description>`, `fix/<short-description>`, `chore/<short-description>`
+- **Merging does not ship.** `release.yml` triggers on a `v*` tag, not on merge:
+  ```bash
+  git tag v0.2.0 && git push origin v0.2.0
+  ```
+
+`develop` was removed on 2026-08-13, matching `opuspopuli`. It existed to insulate
+a stable line from in-flight work — a coordination problem that needs more than one
+committer to exist — while costing a second merge on every change.
+
+Note this repo has **no release history**: no git tag and no GitHub Release has ever
+been created, and `package.json` still reads `0.1.0`. The tag trigger above is what
+starts one.
 
 ## Pre-push workflow (mandatory)
 

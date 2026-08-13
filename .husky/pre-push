@@ -1,3 +1,16 @@
+# ── 0. Block direct push to main ─────────────────────────────────────────────
+# The ruleset already rejects this server-side, so this guard is not what makes
+# the rule true — it is what makes finding out cheap. Every gate below runs
+# BEFORE the push is attempted, so pushing from main means a full coverage run,
+# duplicate-code scan, audit and AI review passes, followed by a server
+# rejection. Matters more under trunk-based: main is now the only long-lived
+# branch, so it is the one you are most likely sitting on.
+if [ "$(git branch --show-current)" = "main" ]; then
+  printf '\nPush blocked: direct pushes to main are not allowed.\n'
+  printf 'Cut a branch and open a pull request instead.\n'
+  exit 1
+fi
+
 # ── 1. Coverage gate ─────────────────────────────────────────────────────────
 echo "Running tests with coverage..."
 pnpm test:cov || exit 1
@@ -60,9 +73,7 @@ export NVM_DIR="$HOME/.nvm"
 
 CLAUDE=$(command -v claude 2>/dev/null)
 
-BASE=$(git merge-base HEAD origin/develop 2>/dev/null \
-     || git merge-base HEAD origin/main 2>/dev/null \
-     || echo "HEAD~1")
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
 DIFF=$(git diff "$BASE"..HEAD 2>/dev/null | head -c 30000)
 
 # ── 8. AI code review gate ────────────────────────────────────────────────────
