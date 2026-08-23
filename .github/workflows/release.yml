@@ -29,7 +29,15 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  # `contents: write` (not read) because anchore/sbom-action attaches the
+  # generated SBOM to the GitHub Release for the tag — a release-asset
+  # upload, which the GITHUB_TOKEN can only do with contents:write. With
+  # read, the v0.3.0 run failed at "Attaching SBOMs to release" with
+  # "Resource not accessible by integration" AFTER the image was already
+  # pushed and signed — a half-shipped release. Everything this workflow
+  # writes is still confined to: the release's assets, GHCR, and
+  # attestations.
+  contents: write
   packages: write
   id-token: write
   attestations: write
