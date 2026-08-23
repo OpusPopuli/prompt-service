@@ -201,6 +201,56 @@ describe('PromptsService', () => {
       expect(result.expiresAt).toBeDefined();
     });
 
+    it('seeded petition template classifies first and leaves no unresolved placeholders (#107)', async () => {
+      // Interpolates the REAL seed entry, not a hand-rolled mock — the
+      // skip-sentinel contract is consumed by the opuspopuli documents
+      // service, so template drift must be a test failure here.
+      const SEEDED = seededPrompts.find(
+        (p) => p.name === 'document-analysis-petition',
+      );
+      const BASE = seededPrompts.find(
+        (p) => p.name === 'document-analysis-base-instructions',
+      );
+
+      prisma.promptTemplate.findFirst
+        .mockResolvedValueOnce({
+          id: '1',
+          name: SEEDED!.name,
+          templateText: SEEDED!.templateText,
+          version: SEEDED!.version ?? 1,
+          isActive: true,
+        })
+        .mockResolvedValueOnce({
+          id: '2',
+          name: BASE!.name,
+          templateText: BASE!.templateText,
+          version: 1,
+          isActive: true,
+        });
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getDocumentAnalysisPrompt(
+        { documentType: 'petition', text: 'Menu: soup, salmon, tiramisu.' },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+      // Classification comes BEFORE the untrusted document text.
+      const classifyAt = result.promptText.indexOf('CLASSIFY BEFORE ANALYZING');
+      const textAt = result.promptText.indexOf('Menu: soup');
+      expect(classifyAt).toBeGreaterThan(-1);
+      expect(classifyAt).toBeLessThan(textAt);
+      // Closed skip enum, both shapes, verbatim.
+      expect(result.promptText).toContain(
+        '{ "skip": true, "reason": "not_a_petition" }',
+      );
+      expect(result.promptText).toContain(
+        '{ "skip": true, "reason": "unreadable" }',
+      );
+      expect(result.promptVersion).toBe('v2');
+    });
+
     it('should fall back to generic when specific type not found', async () => {
       const generic = {
         id: '1',
