@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PromptsService } from './prompts.service';
+import { prompts as seededPrompts } from '../../prisma/seed';
 
 // Mock PrismaService
 function createMockPrisma() {
@@ -954,6 +955,239 @@ describe('PromptsService', () => {
             plainEnglishSummary: 'Y.',
             topics: [],
             whoItAffects: [],
+            userInterestTags: [],
+            userRankingFlags: [],
+          },
+          'test-key',
+          'ca',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getPersonalizedImpactPrompt', () => {
+    // The descriptor's buildVariables has 6 conditional branches
+    // (ACTUAL_EFFECT_LINE, BENEFICIARIES, POTENTIALLY_HARMED,
+    // MATCHED_MEASURE_LINE, USER_INTEREST_TAGS/RANKING_FLAGS,
+    // USER_REGION_LINE). The "all populated" + "all optional absent" pair
+    // covers both legs of each.
+    const IMPACT_TEMPLATE = {
+      id: '1',
+      name: 'personalized-impact',
+      templateText: [
+        'Document type: {{DOCUMENT_TYPE}}',
+        '{{ACTUAL_EFFECT_LINE}}Groups the measure benefits: {{BENEFICIARIES}}',
+        'Groups the measure may burden: {{POTENTIALLY_HARMED}}',
+        '{{MATCHED_MEASURE_LINE}}User-declared interests (topic slugs): {{USER_INTEREST_TAGS}}',
+        'User-declared life-context flags (TRUE-only): {{USER_RANKING_FLAGS}}',
+        '{{USER_REGION_LINE}}',
+        '{{SUMMARY_BLOCK}}',
+      ].join('\n'),
+      version: 1,
+      isActive: true,
+    };
+
+    it('renders the prompt with all optional fields populated', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(IMPACT_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPersonalizedImpactPrompt(
+        {
+          documentType: 'petition',
+          summary: 'Caps annual rent increases at 5%.',
+          actualEffect: 'Limits annual rent hikes.',
+          beneficiaries: ['renters'],
+          potentiallyHarmed: ['landlords'],
+          matchedMeasureTitle: 'Prop 99: Rent Stabilization',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain('Document type: petition');
+      expect(result.promptText).toContain(
+        'What it does: Limits annual rent hikes.',
+      );
+      expect(result.promptText).toContain(
+        'Groups the measure benefits: renters',
+      );
+      expect(result.promptText).toContain(
+        'Groups the measure may burden: landlords',
+      );
+      expect(result.promptText).toContain(
+        'Matched ballot measure: Prop 99: Rent Stabilization',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): housing',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): isRenter',
+      );
+      expect(result.promptText).toContain('Approximate region: 94xxx');
+      // The summary is fenced as an untrusted block, verbatim.
+      expect(result.promptText).toContain('Caps annual rent increases at 5%.');
+      expect(result.promptText).toContain(
+        '## Measure plain-language summary (untrusted',
+      );
+      expect(result.promptVersion).toBe('v1');
+      expect(result.expiresAt).toBeDefined();
+    });
+
+    it('renders cleanly with every optional field absent', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(IMPACT_TEMPLATE);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPersonalizedImpactPrompt(
+        {
+          documentType: 'petition',
+          summary: 'Something.',
+          beneficiaries: [],
+          potentiallyHarmed: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toContain('What it does:');
+      expect(result.promptText).not.toContain('Matched ballot measure:');
+      expect(result.promptText).not.toContain('Approximate region:');
+      expect(result.promptText).toContain(
+        'Groups the measure benefits: none identified',
+      );
+      expect(result.promptText).toContain(
+        'Groups the measure may burden: none identified',
+      );
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+      expect(result.promptText).toContain(
+        'User-declared life-context flags (TRUE-only): none',
+      );
+    });
+
+    // ---- Seeded-template lockstep (#103 review B2) ----
+    // Every other test in this file interpolates hand-rolled mock
+    // templates, which cannot catch drift between the REAL seeded
+    // template and the descriptor's variable map (the cross-repo
+    // contract with opuspopuli's composePersonalizedImpact). These
+    // interpolate the actual seed entry and assert nothing is left
+    // unresolved and the trust boundary holds.
+
+    const SEEDED = seededPrompts.find((p) => p.name === 'personalized-impact');
+    const seededTemplate = {
+      id: '1',
+      name: 'personalized-impact',
+      templateText: SEEDED!.templateText,
+      version: 1,
+      isActive: true,
+    };
+
+    it('seeded template + descriptor map leave no unresolved placeholders (all fields)', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(seededTemplate);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPersonalizedImpactPrompt(
+        {
+          documentType: 'petition',
+          summary: 'Caps annual rent increases at 5%.',
+          actualEffect: 'Limits annual rent hikes.',
+          beneficiaries: ['renters'],
+          potentiallyHarmed: ['landlords'],
+          matchedMeasureTitle: 'Prop 99',
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+          userRegionLabel: '94xxx',
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+
+      // Trust boundary: ALL analysis-derived content (effect line,
+      // benefit/burden groups, summary) sits BELOW the security notice;
+      // declared signals sit above it as trusted metadata.
+      const notice = result.promptText.indexOf('SECURITY NOTICE');
+      expect(notice).toBeGreaterThan(-1);
+      expect(result.promptText.indexOf('What it does:')).toBeGreaterThan(
+        notice,
+      );
+      expect(
+        result.promptText.indexOf('Groups the measure benefits:'),
+      ).toBeGreaterThan(notice);
+      expect(
+        result.promptText.indexOf('Caps annual rent increases'),
+      ).toBeGreaterThan(notice);
+      expect(result.promptText.indexOf('User-declared interests')).toBeLessThan(
+        notice,
+      );
+    });
+
+    it('seeded template + descriptor map leave no unresolved placeholders (optional fields absent)', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(seededTemplate);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPersonalizedImpactPrompt(
+        {
+          documentType: 'petition',
+          summary: 'Something.',
+          beneficiaries: [],
+          potentiallyHarmed: [],
+          userInterestTags: [],
+          userRankingFlags: [],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+      expect(result.promptText).toContain(
+        'User-declared interests (topic slugs): none declared',
+      );
+    });
+
+    it('a value containing a placeholder is NOT expanded (single-pass interpolation)', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(seededTemplate);
+      prisma.promptRequestLog.create.mockResolvedValue({});
+
+      const result = await service.getPersonalizedImpactPrompt(
+        {
+          documentType: 'petition',
+          // A malicious scanned document steering the upstream analysis
+          // must not be able to hoist another variable's content (or
+          // expand $-patterns) via its own field value.
+          summary: 'Injected {{USER_RANKING_FLAGS}} and $& and $` here.',
+          actualEffect: 'Also {{SUMMARY_BLOCK}} here.',
+          beneficiaries: [],
+          potentiallyHarmed: [],
+          userInterestTags: ['housing'],
+          userRankingFlags: ['isRenter'],
+        },
+        'test-key',
+        'ca',
+      );
+
+      expect(result.promptText).toContain(
+        'Injected {{USER_RANKING_FLAGS}} and $& and $` here.',
+      );
+      expect(result.promptText).toContain('Also {{SUMMARY_BLOCK}} here.');
+    });
+
+    it('throws NotFoundException when personalized-impact template is missing', async () => {
+      prisma.promptTemplate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPersonalizedImpactPrompt(
+          {
+            documentType: 'petition',
+            summary: 'X.',
+            beneficiaries: [],
+            potentiallyHarmed: [],
             userInterestTags: [],
             userRankingFlags: [],
           },

@@ -32,6 +32,7 @@ import { PropositionRelevanceExplanationDto } from './dto/proposition-relevance-
 import { RepresentativeRelevanceExplanationDto } from './dto/representative-relevance-explanation.dto';
 import { CommitteeRelevanceExplanationDto } from './dto/committee-relevance-explanation.dto';
 import { BriefingSummaryDto } from './dto/briefing-summary.dto';
+import { PersonalizedImpactDto } from './dto/personalized-impact.dto';
 
 const INVALID_API_KEY = 'Invalid API key';
 const TEMPLATE_NOT_FOUND = 'Template not found';
@@ -194,6 +195,24 @@ export class PromptsController {
     @Req() req: { apiKey: string; region: string },
   ) {
     return this.promptsService.getBillRelevanceExplanationPrompt(
+      dto,
+      req.apiKey,
+      req.region,
+    );
+  }
+
+  @Post('personalized-impact')
+  @Throttle({ default: { ttl: 60_000, limit: PROMPT_THROTTLE_LIMIT } })
+  @ApiOperation({
+    summary:
+      'Get personalized-impact prompt. The LLM is instructed to emit the "What this means to you" read that leads a petition-scan result: 2-4 PLAIN-TEXT sentences (40-90 words) mapping the scanned measure\'s own analysis to the citizen\'s declared signals, with an explicit why-this-applies-to-you — or the exact sentinel `SKIP` when no defensible personalization exists. Plain text, not JSON: the caller renders the output verbatim. Consumed by opuspopuli#1052.',
+  })
+  @ApiPromptResponses()
+  async personalizedImpact(
+    @Body() dto: PersonalizedImpactDto,
+    @Req() req: { apiKey: string; region: string },
+  ) {
+    return this.promptsService.getPersonalizedImpactPrompt(
       dto,
       req.apiKey,
       req.region,
