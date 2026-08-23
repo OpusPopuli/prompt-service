@@ -1,7 +1,7 @@
 {
   "name": "@opuspopuli/prompt-service",
   "version": "0.2.0",
-  "description": "Private AI Prompt Service — serves prompt templates to federated Opus Populi nodes",
+  "description": "Private AI Prompt Service \u2014 serves prompt templates to federated Opus Populi nodes",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -119,7 +119,8 @@
       "js-yaml": ">=5.2.2",
       "file-type": ">=21.3.2",
       "@nestjs/core": ">=11.1.18",
-      "qs": ">=6.15.2"
+      "qs": ">=6.15.2",
+      "deepmerge-ts": ">=8.0.0"
     }
   }
 }
