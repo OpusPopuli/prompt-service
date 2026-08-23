@@ -18,6 +18,31 @@ describe('Document Analysis Prompt (integration)', () => {
     );
   });
 
+  it('petition prompt carries the classification-first skip contract (#107)', async () => {
+    const res = await apiPost('/prompts/document-analysis', {
+      body: {
+        documentType: 'petition',
+        text: 'Chef specials: soup of the day, grilled salmon, tiramisu.',
+      },
+    });
+
+    expect(res.status).toBe(201);
+    const text: string = res.body.promptText;
+    // Classification precedes analysis, with a closed reason enum.
+    expect(text).toContain('CLASSIFY BEFORE ANALYZING');
+    expect(text).toContain('{ "skip": true, "reason": "not_a_petition" }');
+    expect(text).toContain('{ "skip": true, "reason": "unreadable" }');
+    // Conservative bias: a noisy real petition must never be skipped.
+    expect(text).toContain('a real petition must never be skipped');
+    // Skip responses must not echo document text (may contain personal info).
+    expect(text).toContain('NEVER any quotation or echo of the document text');
+    // The analysis shape is unchanged for genuine petitions.
+    expect(text).toContain('"actualEffect"');
+    expect(text).toContain('"relatedMeasures"');
+    // Revision is visible in provenance.
+    expect(res.body.promptVersion).toBe('v2');
+  });
+
   it('should render proposition prompt', async () => {
     const res = await apiPost('/prompts/document-analysis', {
       body: {
