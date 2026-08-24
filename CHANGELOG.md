@@ -12,6 +12,37 @@ reconstructed.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-23
+
+### Changed
+
+- `document-analysis-petition` → **v2**: classification-first — returns a
+  `{ "skip": true, "reason": "not_a_petition" | "unreadable" }` sentinel
+  for non-petition or undecipherable text instead of fabricating
+  petition-shaped analysis
+  ([#107](https://github.com/OpusPopuli/prompt-service/issues/107),
+  [#108](https://github.com/OpusPopuli/prompt-service/pull/108); consumed
+  by [opuspopuli#1057](https://github.com/OpusPopuli/opuspopuli/issues/1057)).
+  Closed reason enum; skip responses never echo document text;
+  conservative bias so a genuine (even noisy-OCR) petition is never
+  skipped. Analysis output unchanged for genuine petitions.
+- Seed supports per-template `version` bumps: revisions now move
+  `promptVersion` in consumer provenance and write a
+  `PromptVersionHistory` row.
+
+### Fixed
+
+- `release.yml` now has `contents: write` so anchore/sbom-action can
+  attach SBOMs to the GitHub Release — the v0.3.0 run failed at that step
+  after the image was already pushed and signed
+  ([#106](https://github.com/OpusPopuli/prompt-service/pull/106)).
+
+### Deploy
+
+Node prompts DB must be re-seeded (`pnpm db:seed`) after this image is
+deployed so the v2 template row lands; until then the opuspopuli
+classifier never fires (safe — behavior identical to v1).
+
 ## [0.3.0] - 2026-08-22
 
 ### Added
