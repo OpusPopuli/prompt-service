@@ -2649,6 +2649,146 @@ Rules:
   },
 ];
 
+/**
+ * #1212 — the quote-then-locate variant of the proposition-analysis template.
+ *
+ * WHY DERIVED RATHER THAN COPIED. The S2 decision gate measures this template
+ * against the canonical one to decide whether asking a model to quote beats
+ * asking it for character offsets. That comparison is only valid if the claims
+ * contract is the ONLY difference between the two prompts — any other drift
+ * confounds it. Two hand-maintained 120-line literals would drift, and would
+ * drift precisely in the shared analysis instructions that must stay fixed.
+ *
+ * WHY THE CANONICAL ENTRY IS NOT TOUCHED. `templateHash` is sha256 of
+ * `templateText`, and that hash drives staleness-triggered regeneration of
+ * every stored analysis. Deriving from the canonical entry at load time
+ * changes zero bytes of it, so its hash cannot move.
+ *
+ * Shipped under a separate NAME rather than as a new version of the canonical
+ * one, so both contracts can be measured side by side without altering what
+ * production serves. Promoted to a version of the canonical name once S2
+ * proves it (plan §7, open decision 1).
+ */
+export const CANONICAL_PROPOSITION_ANALYSIS =
+  'document-analysis-proposition-analysis';
+
+/** Offsets instruction in the canonical template — replaced wholesale below. */
+export const OFFSETS_RULE = `RULE 4: CITE EVERY DERIVED CLAIM
+Every string you put in analysisSummary, keyProvisions, fiscalImpact,
+yesOutcome, noOutcome, existingVsProposed.current, or
+existingVsProposed.proposed MUST be traceable to a specific passage in
+FullText. Emit a corresponding entry in analysisClaims with
+\`sourceStart\`/\`sourceEnd\` pointing to the passage (character offsets
+into the raw FullText, with \`sourceStart\` inclusive and \`sourceEnd\`
+exclusive). If you cannot cite a passage, omit the claim.
+`;
+
+export const QUOTED_RULE = `RULE 4: CITE EVERY DERIVED CLAIM BY QUOTING IT
+Every string you put in analysisSummary, keyProvisions, fiscalImpact,
+yesOutcome, noOutcome, existingVsProposed.current, or
+existingVsProposed.proposed MUST be traceable to a specific passage in
+FullText. Emit a corresponding entry in analysisClaims whose
+\`sourceQuote\` is that passage copied VERBATIM from FullText.
+
+Copy it exactly — same words, same order, same spelling, same
+punctuation, same capitalisation. Do NOT paraphrase, summarise, correct,
+translate, truncate with an ellipsis, or tidy the wording. The consumer
+finds your quote by searching FullText for it character by character; a
+quote it cannot find is discarded and the claim is dropped, so a
+paraphrase loses the claim entirely.
+
+Quote the shortest passage that genuinely supports the claim — normally
+one sentence or clause, and no more than about 300 characters. A quote
+spanning half the measure supports nothing in particular.
+
+Do NOT emit character offsets. Do not count characters or estimate
+positions; that is the consumer's job and it does it exactly. If you
+cannot quote a supporting passage, omit the claim.
+`;
+
+/** The analysisClaims example in OUTPUT FORMAT — must match the rule above. */
+export const OFFSETS_EXAMPLE = `"analysisClaims": [
+    {
+      "claim": "Raises the state gas tax by 3 cents per gallon.",
+      "field": "keyProvisions",
+      "sourceStart": 1432,
+      "sourceEnd": 1587,
+      "confidence": "high"
+    }
+  ]`;
+
+export const QUOTED_EXAMPLE = `"analysisClaims": [
+    {
+      "claim": "Raises the state gas tax by 3 cents per gallon.",
+      "field": "keyProvisions",
+      "sourceQuote": "the tax imposed by Section 7360 is increased by three cents ($0.03) per gallon",
+      "confidence": "high"
+    }
+  ]`;
+
+/**
+ * The claims half of the self-check list. The canonical wording says
+ * "Offsets are into the raw FullText only", which under the quoted contract is
+ * a mixed signal: RULE 4 has just told the model not to emit offsets at all,
+ * while the checklist still asks it to verify them. Scope it to sections and
+ * add the check that actually matters here — that the quote is findable.
+ */
+export const OFFSETS_SELFCHECK = `  \u25A1 Offsets are into the raw FullText only (not including the`;
+
+export const QUOTED_SELFCHECK = `  \u25A1 Every sourceQuote is copied verbatim from FullText and can be found
+    in it by exact string search.
+  \u25A1 Section offsets are into the raw FullText only (not including the`;
+
+/**
+ * Swap the claims contract, asserting each replacement matched. Failing loudly
+ * here is the point: if the canonical template is edited such that these
+ * blocks no longer match, the variant would otherwise silently keep asking for
+ * offsets while being measured as the quoted contract — a false negative on
+ * the S2 gate, which is the one result that would wrongly push the project
+ * onto the segment-id fallback.
+ */
+export function deriveQuotedClaimsContract(canonicalText: string): string {
+  let out = canonicalText;
+  for (const [from, to] of [
+    [OFFSETS_RULE, QUOTED_RULE],
+    [OFFSETS_EXAMPLE, QUOTED_EXAMPLE],
+    [OFFSETS_SELFCHECK, QUOTED_SELFCHECK],
+  ] as const) {
+    if (!out.includes(from)) {
+      throw new Error(
+        `#1212: cannot derive the quoted proposition-analysis template — the ` +
+          `canonical template no longer contains the block starting ` +
+          `"${from.slice(0, 48)}...". Update OFFSETS_RULE/OFFSETS_EXAMPLE in ` +
+          `prisma/seed.ts to match, or the variant would be measured as ` +
+          `quote-then-locate while still asking for offsets.`,
+      );
+    }
+    out = out.replace(from, to);
+  }
+  return out;
+}
+
+const canonicalPropositionAnalysis = prompts.find(
+  (p) => p.name === CANONICAL_PROPOSITION_ANALYSIS,
+);
+if (!canonicalPropositionAnalysis) {
+  throw new Error(
+    `#1212: ${CANONICAL_PROPOSITION_ANALYSIS} is missing from prompts[], so ` +
+      `the quoted variant cannot be derived from it.`,
+  );
+}
+
+prompts.push({
+  name: `${CANONICAL_PROPOSITION_ANALYSIS}-quoted`,
+  category: canonicalPropositionAnalysis.category,
+  description:
+    'EXPERIMENTAL (#1212). Identical to document-analysis-proposition-analysis except that per-claim citations are verbatim quotes (sourceQuote) instead of character offsets, because models cannot reliably count characters — measured anchoring was 2-9%. The consumer locates the quote in the source and derives the offsets itself. Measured against the canonical template at the S2 decision gate; promoted to a version of the canonical name if it wins.',
+  variables: canonicalPropositionAnalysis.variables,
+  templateText: deriveQuotedClaimsContract(
+    canonicalPropositionAnalysis.templateText,
+  ),
+});
+
 function hash(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
