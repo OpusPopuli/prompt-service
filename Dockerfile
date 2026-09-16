@@ -1,5 +1,13 @@
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pinned, not @latest. CI's pnpm/action-setup pins version 9 and the lockfile
+# is lockfileVersion 9.0, so @latest silently drifted the image away from both.
+# pnpm 12.4.2 (published 2026-09-15) turned the ignored-build-scripts warning
+# into a hard ERR_PNPM_IGNORED_BUILDS, which broke `pnpm build` below on every
+# branch at once — the day after main's last green run. Keep this in step with
+# `packageManager` in package.json, which is the single source of truth: the
+# workflows read it via pnpm/action-setup, which errors if a `version:` input
+# also specifies one.
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
 # Install dependencies
@@ -7,8 +15,8 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 COPY prisma ./prisma/
 # HUSKY=0 prevents the prepare script from running git-hook setup in Docker
-# (no .git dir in build context). pnpm@latest (v10+) requires explicit approval
-# for package build scripts; prisma's postinstall is handled by pnpm db:generate below.
+# (no .git dir in build context). --ignore-scripts keeps dependency postinstalls
+# out of the image; prisma's is handled by `pnpm db:generate` on the next line.
 ENV HUSKY=0
 RUN pnpm install --frozen-lockfile --ignore-scripts || pnpm install --ignore-scripts
 RUN pnpm db:generate

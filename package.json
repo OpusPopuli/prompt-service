@@ -1,6 +1,7 @@
 {
   "name": "@opuspopuli/prompt-service",
   "version": "0.4.0",
+  "packageManager": "pnpm@9.15.9",
   "description": "Private AI Prompt Service \u2014 serves prompt templates to federated Opus Populi nodes",
   "private": true,
   "license": "UNLICENSED",
