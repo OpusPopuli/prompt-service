@@ -52,6 +52,15 @@ interface PromptSeed {
    * change. Omitted = 1 (the Prisma default) for never-revised templates.
    */
   version?: number;
+  /**
+   * Why this version exists, recorded on the `PromptVersionHistory` row.
+   *
+   * Omitted = "Initial seed", which is true of a template's first version and
+   * false of every revision after it. A history that says a promoted version
+   * was seeded fresh defeats the one table whose job is letting a reader trace
+   * an output back to its prompt and see what changed (#1143).
+   */
+  changeNote?: string;
 }
 
 // Exported so unit tests can pin the REAL seeded template text against the
@@ -2778,16 +2787,63 @@ if (!canonicalPropositionAnalysis) {
   );
 }
 
-prompts.push({
-  name: `${CANONICAL_PROPOSITION_ANALYSIS}-quoted`,
-  category: canonicalPropositionAnalysis.category,
-  description:
-    'EXPERIMENTAL (#1212). Identical to document-analysis-proposition-analysis except that per-claim citations are verbatim quotes (sourceQuote) instead of character offsets, because models cannot reliably count characters — measured anchoring was 2-9%. The consumer locates the quote in the source and derives the offsets itself. Measured against the canonical template at the S2 decision gate; promoted to a version of the canonical name if it wins.',
-  variables: canonicalPropositionAnalysis.variables,
-  templateText: deriveQuotedClaimsContract(
-    canonicalPropositionAnalysis.templateText,
-  ),
-});
+/**
+ * PROMOTED (#1212 → opuspopuli#1296, 2026-09-20). The canonical template now
+ * serves the quote-then-locate contract as **v2**.
+ *
+ * It shipped first under a separate `-quoted` name so both contracts could be
+ * measured side by side without altering what production served. That name is
+ * gone: `name` is unique, so a template has exactly one row and versions are a
+ * column plus `prompt_version_history` — two names would have meant two
+ * lineages and two hashes for one prompt, which is the opposite of the single
+ * attestation chain #1143 exists to provide.
+ *
+ * **This deliberately moves the canonical hash**, from
+ * `850bdd19…` to `ac0e63eb…`. That is the cutover mechanism rather than a side
+ * effect: `analysisPromptHash` on every stored analysis is compared against
+ * the live hash, so moving it marks all 54 stored analyses stale and the next
+ * `generateMissing` regenerates them under the new contract. No code change is
+ * needed in the consumer.
+ *
+ * Why promote before the measurement the `-quoted` name was created for: the
+ * offsets contract cannot be rescued by a better model. It asks the model to
+ * count characters, which #1212 measured at 2–9% and opuspopuli#1294
+ * re-measured at 11.2% against the whole stored corpus. Quote-then-locate
+ * moves the arithmetic into code, which is exact. The risk it carries is a
+ * fabricated quote, and that fails closed — the consumer cannot locate it, so
+ * the claim is dropped rather than mis-anchored.
+ *
+ * Rollback is `version: 1` plus the v1 text, which `prompt_version_history`
+ * retains and git preserves.
+ *
+ * The derivation is kept rather than inlined so its guard survives: edit the
+ * canonical literal such that the offsets blocks no longer match and the seed
+ * throws, instead of quietly serving a contract nobody chose.
+ */
+/**
+ * The v1 text, captured before promotion.
+ *
+ * Kept because the promotion mutates in place, so without this v1 would exist
+ * only in git and in `prompt_version_history`. Exported so the contract test
+ * can assert that promotion changed which NAME serves the text and not the
+ * text itself — and so a rollback has something to point at.
+ */
+export const CANONICAL_PROPOSITION_ANALYSIS_V1_TEXT =
+  canonicalPropositionAnalysis.templateText;
+
+canonicalPropositionAnalysis.templateText = deriveQuotedClaimsContract(
+  CANONICAL_PROPOSITION_ANALYSIS_V1_TEXT,
+);
+canonicalPropositionAnalysis.version = 2;
+canonicalPropositionAnalysis.changeNote =
+  'Promoted the quote-then-locate contract (#1212) from the experimental ' +
+  '`-quoted` name to v2 of the canonical name. v1 asked the model for ' +
+  'character offsets, which measured 2-9% anchoring in #1212 and 11.2% ' +
+  'across the whole stored corpus in opuspopuli#1294. v2 asks for a verbatim ' +
+  'quote and the consumer locates it, moving the arithmetic into code. ' +
+  'Identical text to what the `-quoted` name served, which is now retired.';
+canonicalPropositionAnalysis.description =
+  'Ballot proposition detail-page analysis. v2 (prompt-service#112, opuspopuli#1212/#1296): per-claim citations are a verbatim quote (sourceQuote) rather than character offsets, because models cannot reliably count characters — anchoring measured 2-9% in #1212 and 11.2% across the whole stored corpus in #1294. The consumer locates the quote in the source and derives the offsets itself, so the arithmetic is exact and a quote that cannot be found fails closed rather than mis-anchoring. v1 asked for offsets directly.';
 
 function hash(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -2854,10 +2910,42 @@ async function seedVaultKeys() {
   }
 }
 
+/**
+ * Retire the `-quoted` variant, now that its contract IS the canonical one.
+ *
+ * Dropping an entry from `prompts[]` does not remove its row — the seed only
+ * upserts — so without this the database would keep serving a second template
+ * whose text is byte-identical to the promoted canonical under a different
+ * name and a different hash. Two lineages for one prompt is precisely what the
+ * promotion was meant to end, and an output attributed to the orphan would be
+ * unexplainable against the published charter (#1143).
+ *
+ * Deactivated rather than deleted: lookup filters on `isActive`, so this makes
+ * it unreachable while leaving the row and its version history intact as the
+ * record of what was measured. Idempotent — matches nothing on a fresh
+ * database and updates nothing on a second run.
+ */
+async function retirePromotedQuotedVariant(): Promise<void> {
+  const { count } = await prisma.promptTemplate.updateMany({
+    where: {
+      name: `${CANONICAL_PROPOSITION_ANALYSIS}-quoted`,
+      isActive: true,
+    },
+    data: { isActive: false },
+  });
+
+  if (count > 0) {
+    console.log(
+      `  ✓ retired ${CANONICAL_PROPOSITION_ANALYSIS}-quoted ` +
+        `(promoted to v2 of the canonical name)`,
+    );
+  }
+}
+
 async function main() {
   console.log('Seeding prompt templates...');
 
-  for (const { name, ...data } of prompts) {
+  for (const { name, changeNote, ...data } of prompts) {
     const template = await prisma.promptTemplate.upsert({
       where: { name },
       update: data,
@@ -2876,7 +2964,12 @@ async function main() {
           version: template.version,
           templateText: template.templateText,
           templateHash: hash(template.templateText),
-          changeNote: 'Initial seed',
+          // Why this version exists. Defaulting every row to "Initial seed"
+          // made the history of a PROMOTED version say it was seeded fresh —
+          // false, and corrosive in the one table whose job is letting a
+          // reader trace an output back to the prompt that produced it and
+          // see what changed (#1143).
+          changeNote: changeNote ?? 'Initial seed',
         },
       });
     }
@@ -2885,6 +2978,8 @@ async function main() {
   }
 
   console.log(`\nSeeded ${prompts.length} prompt templates.`);
+
+  await retirePromotedQuotedVariant();
 
   await seedVaultKeys();
 }
