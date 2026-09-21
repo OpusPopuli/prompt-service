@@ -797,6 +797,26 @@ When the measure states specific numbers, dates, percentages, or dollar
 figures, include them. Don't vague out concrete provisions into generic
 language.
 
+RULE 3a: SYMMETRY BETWEEN THE TWO OUTCOMES
+"yesOutcome" and "noOutcome" describe one choice from two sides. Give
+them comparable length and comparable specificity. A full account of a
+yes beside a terse no reads as a recommendation even when every word is
+neutral, and a reader experiences that as advocacy.
+
+Concretely:
+  - If you quantify the change under yes, state the corresponding
+    current figure under no when the text supplies it. "Raises the tax
+    to 8%" pairs with "the tax stays at 6%", not with "no change".
+  - Name what specifically CONTINUES under no — the provision, program,
+    rate or authority that stays in force. Do not write "the status
+    quo", "nothing changes", or "current law remains" on their own;
+    those say nothing a voter can check.
+  - Neither side gets consequences, predictions, or framing the other
+    does not. If the text does not support a detail for one side, leave
+    it out of both.
+  - If the measure's text genuinely supports less detail on one side,
+    write less on BOTH rather than padding one.
+
 RULE 4: CITE EVERY DERIVED CLAIM
 Every string you put in analysisSummary, keyProvisions, fiscalImpact,
 yesOutcome, noOutcome, existingVsProposed.current, or
@@ -849,8 +869,8 @@ commentary outside the JSON. Every field below is required; use "" or
     "The measure takes effect January 1 following passage."
   ],
   "fiscalImpact": "Estimated $X million per year in new revenue; costs $Y one-time for implementation. Exact figures from the text or \"\" if the measure does not quantify.",
-  "yesOutcome": "A yes vote means [concrete change]: e.g., 'the state's minimum wage rises to $18/hour by 2030'.",
-  "noOutcome": "A no vote means [status quo]: e.g., 'the current $16/hour minimum wage remains in effect'.",
+  "yesOutcome": "A yes vote means [concrete change, quantified where the text quantifies it]: e.g., 'the state minimum wage rises from $16/hour to $18/hour by 2030'.",
+  "noOutcome": "A no vote means [what specifically CONTINUES, quantified the same way — not the words 'status quo']: e.g., 'the state minimum wage stays at $16/hour, with no scheduled increase'.",
   "existingVsProposed": {
     "current": "Describe the current state of the law if the measure recites it; otherwise \"\".",
     "proposed": "Describe what the measure changes current law to."
@@ -2821,27 +2841,37 @@ if (!canonicalPropositionAnalysis) {
  * throws, instead of quietly serving a contract nobody chose.
  */
 /**
- * The v1 text, captured before promotion.
+ * The canonical template in its OFFSETS form — the literal above, before the
+ * quote-then-locate derivation is applied to it.
  *
- * Kept because the promotion mutates in place, so without this v1 would exist
- * only in git and in `prompt_version_history`. Exported so the contract test
- * can assert that promotion changed which NAME serves the text and not the
- * text itself — and so a rollback has something to point at.
+ * NOT the historical v1: the literal keeps being edited (v3 added the yes/no
+ * symmetry rule), so this tracks the current template minus the claims
+ * contract swap, not any shipped version. The exact bytes of v1 and v2 live
+ * in `prompt_version_history` and in git, which is where an attestation
+ * question about a past output should be answered.
+ *
+ * Exported so the contract test can assert that the derivation changes the
+ * claims contract and nothing else.
  */
-export const CANONICAL_PROPOSITION_ANALYSIS_V1_TEXT =
+export const CANONICAL_PROPOSITION_ANALYSIS_OFFSETS_TEXT =
   canonicalPropositionAnalysis.templateText;
 
 canonicalPropositionAnalysis.templateText = deriveQuotedClaimsContract(
-  CANONICAL_PROPOSITION_ANALYSIS_V1_TEXT,
+  CANONICAL_PROPOSITION_ANALYSIS_OFFSETS_TEXT,
 );
-canonicalPropositionAnalysis.version = 2;
+canonicalPropositionAnalysis.version = 3;
 canonicalPropositionAnalysis.changeNote =
-  'Promoted the quote-then-locate contract (#1212) from the experimental ' +
-  '`-quoted` name to v2 of the canonical name. v1 asked the model for ' +
-  'character offsets, which measured 2-9% anchoring in #1212 and 11.2% ' +
-  'across the whole stored corpus in opuspopuli#1294. v2 asks for a verbatim ' +
-  'quote and the consumer locates it, moving the arithmetic into code. ' +
-  'Identical text to what the `-quoted` name served, which is now retired.';
+  'v3 (#114): yesOutcome and noOutcome were asymmetric by construction. The ' +
+  'schema asked for a "concrete change" on one side and the "status quo" on ' +
+  'the other — not symmetric tasks — and the neutrality rules governed ' +
+  'vocabulary and framing but never proportion, so an analysis could satisfy ' +
+  'all of them and still set a full yes case beside a terse no. Measured: ' +
+  '"yes" ran longer on the same 8 of 10 measures for two unrelated model ' +
+  'families, which points at the prompt rather than the model. Adds RULE 3a ' +
+  '(symmetry) and rebalances the field hints so noOutcome names what ' +
+  'CONTINUES, quantified the same way. v2 promoted quote-then-locate (#1212) ' +
+  'to the canonical name; v1 asked for character offsets.';
+
 canonicalPropositionAnalysis.description =
   'Ballot proposition detail-page analysis. v2 (prompt-service#112, opuspopuli#1212/#1296): per-claim citations are a verbatim quote (sourceQuote) rather than character offsets, because models cannot reliably count characters — anchoring measured 2-9% in #1212 and 11.2% across the whole stored corpus in #1294. The consumer locates the quote in the source and derives the offsets itself, so the arithmetic is exact and a quote that cannot be found fails closed rather than mis-anchoring. v1 asked for offsets directly.';
 

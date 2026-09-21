@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import {
   CANONICAL_PROPOSITION_ANALYSIS,
-  CANONICAL_PROPOSITION_ANALYSIS_V1_TEXT as V1_TEXT,
+  CANONICAL_PROPOSITION_ANALYSIS_OFFSETS_TEXT as OFFSETS_TEXT,
   OFFSETS_EXAMPLE,
   OFFSETS_RULE,
   OFFSETS_SELFCHECK,
@@ -22,19 +22,28 @@ const byName = (name: string) => {
   return found;
 };
 
-/** The canonical hash before promotion — what every stored analysis cites. */
+/** v1 — the offsets contract, and what every stored analysis still cites. */
 const V1_HASH =
   '850bdd19629b0896b7d3079770050b5e093ddf20d1c838572455474dc81f9df0';
 
-/** The hash the `-quoted` variant served, byte-for-byte, before promotion. */
+/**
+ * v2 — the hash the `-quoted` variant served, and **the exact bytes the
+ * anchoring eval measured**: 57% on `olmo-3.1:32b-instruct`, 28% on
+ * `olmo-3:7b-instruct`. Kept because those figures belong to this text, not
+ * to whatever the canonical name serves today.
+ */
 const V2_HASH =
   'ac0e63ebe039773a78964b032a0970d2d1cedc78ce453bc6febf5afb762b997d';
+
+/** v3 — adds the yes/no symmetry rule (#114). */
+const V3_HASH =
+  'd62e7b0a144bafa1192fbb5c059f31250052b50b572c05c3d839bc98acde3cb7';
 
 describe('proposition-analysis claim contracts (#1212)', () => {
   const canonical = byName(CANONICAL_PROPOSITION_ANALYSIS);
   const quoted = canonical;
 
-  describe('the canonical template, promoted to v2', () => {
+  describe('the canonical template', () => {
     // templateHash is sha256(templateText) and drives staleness-triggered
     // regeneration of every stored analysis. Promotion MOVES it on purpose —
     // that is the cutover mechanism, not a side effect: every stored analysis
@@ -42,29 +51,85 @@ describe('proposition-analysis claim contracts (#1212)', () => {
     // next generateMissing regenerates them under the new contract.
     it('serves the quoted contract, moving the hash off v1', () => {
       expect(sha256(canonical.templateText)).not.toBe(V1_HASH);
-      expect(sha256(canonical.templateText)).toBe(V2_HASH);
+      expect(sha256(canonical.templateText)).toBe(V3_HASH);
     });
 
-    // Promotion must change WHICH NAME serves the text, never the text. This
-    // pins it to the bytes that were reviewed and merged under the `-quoted`
-    // name, so the promotion cannot smuggle in an edit.
-    it('serves exactly the bytes the -quoted variant was measured as', () => {
-      expect(sha256(deriveQuotedClaimsContract(V1_TEXT))).toBe(V2_HASH);
-      expect(canonical.templateText).toBe(deriveQuotedClaimsContract(V1_TEXT));
+    // Stated as an assertion rather than left implicit: the anchoring figures
+    // (57% / 28%) were measured against V2_HASH, and v3 is not those bytes.
+    // The claims contract is unchanged — the next test pins that — so the
+    // numbers should carry, but "should" is not "measured", and the next
+    // generation run is what re-measures them.
+    it('is no longer the exact text the anchoring eval measured', () => {
+      expect(sha256(canonical.templateText)).not.toBe(V2_HASH);
     });
 
-    it('is version 2', () => {
-      expect(canonical.version).toBe(2);
+    it('is version 3', () => {
+      expect(canonical.version).toBe(3);
     });
 
-    // The version-history row records WHY a version exists. Every row
-    // defaulted to "Initial seed", which for a promoted version is false —
-    // and this is the one table whose job is letting a reader trace an output
-    // back to its prompt and see what changed (#1143).
-    it('records why v2 exists, not that it was seeded fresh', () => {
-      expect(canonical.changeNote).toBeDefined();
-      expect(canonical.changeNote).not.toBe('Initial seed');
-      expect(canonical.changeNote).toMatch(/promoted/i);
+    // v3 changes how the two OUTCOMES are written. It must not touch the
+    // claims contract — that is what the anchoring numbers were measured on,
+    // and quietly altering it would make them describe a prompt that no
+    // longer exists while still being quoted as current.
+    it('leaves the claims contract exactly as v2 measured it', () => {
+      expect(canonical.templateText).toContain(QUOTED_RULE);
+      expect(canonical.templateText).toContain(QUOTED_EXAMPLE);
+      expect(canonical.templateText).toContain(QUOTED_SELFCHECK);
+    });
+
+    // #114. The symmetry eval measured "yes" running longer than "no" on the
+    // same 8 of 10 measures for TWO unrelated model families, which points at
+    // the prompt rather than the model — and the cause was in the schema: one
+    // field asked for a "concrete change", the other for the "status quo".
+    // Those are not symmetric tasks.
+    describe('yes/no outcome symmetry (#114)', () => {
+      it('instructs the two outcomes to be comparable', () => {
+        expect(canonical.templateText).toContain('RULE 3a: SYMMETRY');
+        expect(canonical.templateText).toMatch(
+          /comparable length and comparable specificity/,
+        );
+      });
+
+      it('asks noOutcome for what CONTINUES, not for the status quo', () => {
+        // Anchored on the FIELD HINT, not on the first mention of the field:
+        // RULE 3a names both outcomes too, and slicing from there measured
+        // the rule rather than the schema.
+        const at = canonical.templateText.indexOf(
+          '"noOutcome": "A no vote means',
+        );
+        expect(at).toBeGreaterThan(-1);
+        const hint = canonical.templateText.slice(at, at + 260);
+
+        // "the status quo" is exactly the instruction that produced a terse
+        // no case: it asks the model to note that things stay the same
+        // rather than to say what specifically stays.
+        expect(hint).toMatch(/CONTINUES/);
+        expect(hint).not.toMatch(/\[status quo\]/);
+      });
+
+      it('pairs a quantified yes with a quantified no in its own example', () => {
+        // The worked examples teach more than the instruction does. Both
+        // sides now carry the figure, so "rises to $18" cannot sit beside a
+        // bare "no change".
+        const from = canonical.templateText.indexOf(
+          '"yesOutcome": "A yes vote means',
+        );
+        const to = canonical.templateText.indexOf(
+          '"noOutcome": "A no vote means',
+        );
+        expect(from).toBeGreaterThan(-1);
+        const yes = canonical.templateText.slice(from, to);
+        expect(yes).toMatch(/\$16\/hour to \$18\/hour/);
+        expect(canonical.templateText).toMatch(/stays at \$16\/hour/);
+      });
+
+      it('forbids padding one side to match the other', () => {
+        // Symmetry achieved by inventing detail would be worse than the
+        // asymmetry: it trades a thumb on the scale for a fabrication.
+        expect(canonical.templateText).toMatch(
+          /write less on BOTH rather than padding one/,
+        );
+      });
     });
 
     it('no longer asks for character offsets', () => {
@@ -108,7 +173,9 @@ describe('proposition-analysis claim contracts (#1212)', () => {
       // promotion makes rather than a property both contracts shared. Was
       // asserted against `canonical` before promotion; canonical IS the
       // quoted contract now, so v1 is what it must be compared against.
-      expect(V1_TEXT).toMatch(/\u25A1 Offsets are into the raw FullText only/);
+      expect(OFFSETS_TEXT).toMatch(
+        /\u25A1 Offsets are into the raw FullText only/,
+      );
     });
 
     it('self-checks that the quote is actually findable', () => {
@@ -129,7 +196,7 @@ describe('proposition-analysis claim contracts (#1212)', () => {
     // Promotion must change the claims contract and NOTHING else. Anything
     // else that moved would ride along into a regeneration of the entire
     // corpus, attributed to a change nobody reviewed.
-    it('differs from v1 ONLY in the claims contract', () => {
+    it('differs from its offsets form ONLY in the claims contract', () => {
       const neutralise = (text: string): string =>
         text
           .replace(OFFSETS_RULE, '<<CLAIMS_RULE>>')
@@ -139,7 +206,7 @@ describe('proposition-analysis claim contracts (#1212)', () => {
           .replace(OFFSETS_SELFCHECK, '<<CLAIMS_SELFCHECK>>')
           .replace(QUOTED_SELFCHECK, '<<CLAIMS_SELFCHECK>>');
 
-      expect(neutralise(canonical.templateText)).toBe(neutralise(V1_TEXT));
+      expect(neutralise(canonical.templateText)).toBe(neutralise(OFFSETS_TEXT));
     });
   });
 
@@ -156,7 +223,7 @@ describe('proposition-analysis claim contracts (#1212)', () => {
     it('replaces both the rule and the worked example', () => {
       // From v1: the canonical text is already derived, so passing it back
       // in would correctly trip the guard rather than test the replacement.
-      const out = deriveQuotedClaimsContract(V1_TEXT);
+      const out = deriveQuotedClaimsContract(OFFSETS_TEXT);
       expect(out).toContain(QUOTED_RULE);
       expect(out).toContain(QUOTED_EXAMPLE);
       expect(out).not.toContain(OFFSETS_RULE);
