@@ -1477,7 +1477,10 @@ Respond with ONLY the JSON object.`,
     name: 'civics-extraction-compact',
     category: 'civics_extraction',
     description:
-      'Compact (verbatim-only) variant of civics-extraction for the throughput-bound bulk sync. Extracts the same structured CivicsBlock, but every CivicText field carries ONLY the verbatim source text (no plain-language rewrite), roughly halving output tokens.',
+      'Compact (verbatim-only) variant of civics-extraction for the throughput-bound bulk sync. Extracts the same structured CivicsBlock, but every CivicText field carries ONLY the verbatim source text (no plain-language rewrite), roughly halving output tokens. v2: carries the same field-routing rules as civics-extraction v2.',
+    version: 2,
+    changeNote:
+      'v2 (opuspopuli#1332). Carries the identical field-routing block added to civics-extraction v2 — the third page shape (ballot-measure / direct-democracy), the rule that a term the page merely USES is not a glossary entry, and the link-directory case. Bumped ALONGSIDE the primary rather than after it: the two templates share this passage verbatim, and revising the text without moving the version would serve promptHash = hash(new text) under promptVersion = v1 while PromptVersionHistory kept the old hash — making verifyPrompt() return valid: false for every compact civics prompt. On a platform whose attestation chain is the point, a silent hash/version mismatch is worse than the routing bug this fixes.',
     variables: [
       'REGION_ID',
       'SOURCE_URL',
