@@ -1238,7 +1238,10 @@ Self-check before output:
     name: 'civics-extraction',
     category: 'civics_extraction',
     description:
-      "Extract a structured CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) from an official government page describing how a region's legislature works. Every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople.",
+      "Extract a structured CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) from an official government page describing how a region's legislature works. Every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople. v2: explicit field routing for ballot-measure pages and link directories, after a gold-set eval showed the model reading those pages correctly and filing the content under the wrong key.",
+    version: 2,
+    changeNote:
+      'v2 (opuspopuli#1332). Measured, not guessed: scored against docs/evals/2026-09-27-civics-gold.md, nemotron-3.5-lightning read two CA ballot-measure pages with precision 1.00 and ZERO fabrications, then emitted the content as glossary[] while leaving measureTypes[] and lifecycleStages[] empty — recall 0 on both. Not a capability failure; a routing failure. v1 offered only two worked page shapes, a glossary page and a how-a-bill-becomes-law page, so a ballot-measure status page matched neither and fell through to the conservative "better to omit" instruction. v2 adds that third shape with explicit routing rules (a measure type named in a heading goes to measureTypes with its signature requirement attached; a dated milestone goes to lifecycleStages), states that a term the page merely USES is not a glossary entry without a definition on the page, and adds the link-directory case — a resources page of link titles documents nothing and must emit empty arrays, which is where the previous model manufactured 15,566 bytes of civics data.',
     variables: [
       'REGION_ID',
       'SOURCE_URL',
@@ -1286,7 +1289,20 @@ Respond with ONLY valid JSON matching this CivicsBlock shape (no markdown, no co
   "glossary": []
 }
 
-Only fill the arrays/objects that the source page actually documents. Never fabricate. If the page is a glossary, glossary[] fills and the others may be empty. If it is a how-a-bill-becomes-law page, lifecycleStages[] fills and chambers[]/measureTypes[] may be partial or empty. Better to omit than to invent.
+Only fill the arrays/objects that the source page actually documents. Never fabricate. Better to omit than to invent.
+
+WHICH FIELD A FACT BELONGS IN. Three page shapes, and the third is the one most often misread:
+
+1. A GLOSSARY page — terms with definitions. glossary[] fills; the others may be empty.
+2. A HOW-A-BILL-BECOMES-LAW page — the legislative process. lifecycleStages[] fills; chambers[]/measureTypes[] may be partial or empty.
+3. A BALLOT-MEASURE or DIRECT-DEMOCRACY page — a list of initiatives, referenda or propositions with their status. measureTypes[] AND lifecycleStages[] fill. glossary[] is usually EMPTY on these pages.
+
+On a ballot-measure page, route facts like this:
+- A measure type named in a heading or title — "... INITIATIVE STATUTE.", "... INITIATIVE CONSTITUTIONAL AMENDMENT.", "... Legislative Statute." — is a measureTypes[] entry. If the page states a signature requirement for that type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
+- A dated or named procedural milestone — "Raw Count Deadline", "Summary Date", "25% of Signatures Reached", "Failed 07/14/2026", "withdrawn by proponents", "eligible", "qualified for the ballot" — is a lifecycleStages[] entry.
+- NEITHER of those is a glossary entry. A term the page merely USES is not a glossary entry; a glossary entry requires a definition ON THE PAGE. If the page names "Raw Count Deadline" without explaining it, emit a lifecycle stage, not a glossary term.
+
+A page that is a DIRECTORY OF LINKS — a resources or index page whose content is link titles and short blurbs pointing elsewhere ("Glossary and Legislative Terms", "Legislative Process", "Visit the State Capitol") — documents nothing itself. Emit empty arrays. A link to a glossary is not a glossary; a link to a page about the legislative process is not the process.
 
 GENERATION ORDER: Generate \`lifecycleStages[]\` before \`measureTypes[]\`. The \`lifecycleStageIds\` array in each measureType must reference \`id\` values from the \`lifecycleStages[]\` you have already defined.
 
@@ -1509,7 +1525,20 @@ Respond with ONLY valid JSON matching this CivicsBlock shape (no markdown, no co
   "glossary": []
 }
 
-Only fill the arrays/objects that the source page actually documents. Never fabricate. If the page is a glossary, glossary[] fills and the others may be empty. If it is a how-a-bill-becomes-law page, lifecycleStages[] fills and chambers[]/measureTypes[] may be partial or empty. Better to omit than to invent.
+Only fill the arrays/objects that the source page actually documents. Never fabricate. Better to omit than to invent.
+
+WHICH FIELD A FACT BELONGS IN. Three page shapes, and the third is the one most often misread:
+
+1. A GLOSSARY page — terms with definitions. glossary[] fills; the others may be empty.
+2. A HOW-A-BILL-BECOMES-LAW page — the legislative process. lifecycleStages[] fills; chambers[]/measureTypes[] may be partial or empty.
+3. A BALLOT-MEASURE or DIRECT-DEMOCRACY page — a list of initiatives, referenda or propositions with their status. measureTypes[] AND lifecycleStages[] fill. glossary[] is usually EMPTY on these pages.
+
+On a ballot-measure page, route facts like this:
+- A measure type named in a heading or title — "... INITIATIVE STATUTE.", "... INITIATIVE CONSTITUTIONAL AMENDMENT.", "... Legislative Statute." — is a measureTypes[] entry. If the page states a signature requirement for that type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
+- A dated or named procedural milestone — "Raw Count Deadline", "Summary Date", "25% of Signatures Reached", "Failed 07/14/2026", "withdrawn by proponents", "eligible", "qualified for the ballot" — is a lifecycleStages[] entry.
+- NEITHER of those is a glossary entry. A term the page merely USES is not a glossary entry; a glossary entry requires a definition ON THE PAGE. If the page names "Raw Count Deadline" without explaining it, emit a lifecycle stage, not a glossary term.
+
+A page that is a DIRECTORY OF LINKS — a resources or index page whose content is link titles and short blurbs pointing elsewhere ("Glossary and Legislative Terms", "Legislative Process", "Visit the State Capitol") — documents nothing itself. Emit empty arrays. A link to a glossary is not a glossary; a link to a page about the legislative process is not the process.
 
 GENERATION ORDER: Generate \`lifecycleStages[]\` before \`measureTypes[]\`. The \`lifecycleStageIds\` array in each measureType must reference \`id\` values from the \`lifecycleStages[]\` you have already defined.
 
