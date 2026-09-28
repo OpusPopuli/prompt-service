@@ -1239,9 +1239,9 @@ Self-check before output:
     category: 'civics_extraction',
     description:
       "Extract a structured CivicsBlock (chambers, measure types, lifecycle stages with status patterns, glossary, sessionScheme) from an official government page describing how a region's legislature works. Every text field carries BOTH the verbatim source text AND a plain-language rewrite for laypeople. v2: explicit field routing for ballot-measure pages and link directories, after a gold-set eval showed the model reading those pages correctly and filing the content under the wrong key.",
-    version: 2,
+    version: 3,
     changeNote:
-      'v2 (opuspopuli#1332). Measured, not guessed: scored against docs/evals/2026-09-27-civics-gold.md, nemotron-3.5-lightning read two CA ballot-measure pages with precision 1.00 and ZERO fabrications, then emitted the content as glossary[] while leaving measureTypes[] and lifecycleStages[] empty — recall 0 on both. Not a capability failure; a routing failure. v1 offered only two worked page shapes, a glossary page and a how-a-bill-becomes-law page, so a ballot-measure status page matched neither and fell through to the conservative "better to omit" instruction. v2 adds that third shape with explicit routing rules (a measure type named in a heading goes to measureTypes with its signature requirement attached; a dated milestone goes to lifecycleStages), states that a term the page merely USES is not a glossary entry without a definition on the page, and adds the link-directory case — a resources page of link titles documents nothing and must emit empty arrays, which is where the previous model manufactured 15,566 bytes of civics data.',
+      'v3 (opuspopuli#1332). v2 fixed the field routing and was measured: failed-qualify went recall 0 -> 0.50 with precision 1.00 and no invention, and the link-directory page went completely clean. But qualified-ballot-measures stayed at recall 0, and the eval showed why — its propositions name their type INLINE at the end of each line ("Authorizes Bonds for Housing Affordability Programs. Legislative Statute.") while v2 spoke only of a type "named in a heading or title". v3 names the trailing-phrase form explicitly, gives all three shapes as examples including the COMBINED type ("Initiative Constitutional Amendment and Statute"), and says that a list where every line ends this way documents the full set — emit every distinct type, not just the first. PRIOR v2 NOTE: Measured, not guessed: scored against docs/evals/2026-09-27-civics-gold.md, nemotron-3.5-lightning read two CA ballot-measure pages with precision 1.00 and ZERO fabrications, then emitted the content as glossary[] while leaving measureTypes[] and lifecycleStages[] empty — recall 0 on both. Not a capability failure; a routing failure. v1 offered only two worked page shapes, a glossary page and a how-a-bill-becomes-law page, so a ballot-measure status page matched neither and fell through to the conservative "better to omit" instruction. v2 adds that third shape with explicit routing rules (a measure type named in a heading goes to measureTypes with its signature requirement attached; a dated milestone goes to lifecycleStages), states that a term the page merely USES is not a glossary entry without a definition on the page, and adds the link-directory case — a resources page of link titles documents nothing and must emit empty arrays, which is where the previous model manufactured 15,566 bytes of civics data.',
     variables: [
       'REGION_ID',
       'SOURCE_URL',
@@ -1298,7 +1298,11 @@ WHICH FIELD A FACT BELONGS IN. Three page shapes, and the third is the one most 
 3. A BALLOT-MEASURE or DIRECT-DEMOCRACY page — a list of initiatives, referenda or propositions with their status. measureTypes[] AND lifecycleStages[] fill. glossary[] is usually EMPTY on these pages.
 
 On a ballot-measure page, route facts like this:
-- A measure type named in a heading or title — "... INITIATIVE STATUTE.", "... INITIATIVE CONSTITUTIONAL AMENDMENT.", "... Legislative Statute." — is a measureTypes[] entry. If the page states a signature requirement for that type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
+- A measure type named in a heading, a title, OR as a trailing phrase at the end of a measure's own line is a measureTypes[] entry. All of these name a type:
+    "CHILD SAFETY REQUIREMENTS FOR ARTIFICIAL INTELLIGENCE PRODUCTS. INITIATIVE STATUTE."   (end of an all-caps title)
+    "Authorizes Bonds for Housing Affordability Programs. Legislative Statute."             (end of a sentence-case line)
+    "Imposes One-Time Tax on Certain Taxpayers. Initiative Constitutional Amendment and Statute."  (a COMBINED type — emit it as its own type, not as two)
+  A list of propositions or measures where every line ends this way documents the FULL SET of types on that page: emit every distinct one you see, not just the first. If the page states a signature requirement for a type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
 - A dated or named procedural milestone — "Raw Count Deadline", "Summary Date", "25% of Signatures Reached", "Failed 07/14/2026", "withdrawn by proponents", "eligible", "qualified for the ballot" — is a lifecycleStages[] entry.
 - NEITHER of those is a glossary entry. A term the page merely USES is not a glossary entry; a glossary entry requires a definition ON THE PAGE. If the page names "Raw Count Deadline" without explaining it, emit a lifecycle stage, not a glossary term.
 
@@ -1478,9 +1482,9 @@ Respond with ONLY the JSON object.`,
     category: 'civics_extraction',
     description:
       'Compact (verbatim-only) variant of civics-extraction for the throughput-bound bulk sync. Extracts the same structured CivicsBlock, but every CivicText field carries ONLY the verbatim source text (no plain-language rewrite), roughly halving output tokens. v2: carries the same field-routing rules as civics-extraction v2.',
-    version: 2,
+    version: 3,
     changeNote:
-      'v2 (opuspopuli#1332). Carries the identical field-routing block added to civics-extraction v2 — the third page shape (ballot-measure / direct-democracy), the rule that a term the page merely USES is not a glossary entry, and the link-directory case. Bumped ALONGSIDE the primary rather than after it: the two templates share this passage verbatim, and revising the text without moving the version would serve promptHash = hash(new text) under promptVersion = v1 while PromptVersionHistory kept the old hash — making verifyPrompt() return valid: false for every compact civics prompt. On a platform whose attestation chain is the point, a silent hash/version mismatch is worse than the routing bug this fixes.',
+      'v3 (opuspopuli#1332). Carries the inline-measure-type rule added to civics-extraction v3, for the same reason it carried v2: the two templates share this passage verbatim, and revising text without moving the version serves a promptHash that PromptVersionHistory disagrees with. PRIOR v2 NOTE: Carries the identical field-routing block added to civics-extraction v2 — the third page shape (ballot-measure / direct-democracy), the rule that a term the page merely USES is not a glossary entry, and the link-directory case. Bumped ALONGSIDE the primary rather than after it: the two templates share this passage verbatim, and revising the text without moving the version would serve promptHash = hash(new text) under promptVersion = v1 while PromptVersionHistory kept the old hash — making verifyPrompt() return valid: false for every compact civics prompt. On a platform whose attestation chain is the point, a silent hash/version mismatch is worse than the routing bug this fixes.',
     variables: [
       'REGION_ID',
       'SOURCE_URL',
@@ -1537,7 +1541,11 @@ WHICH FIELD A FACT BELONGS IN. Three page shapes, and the third is the one most 
 3. A BALLOT-MEASURE or DIRECT-DEMOCRACY page — a list of initiatives, referenda or propositions with their status. measureTypes[] AND lifecycleStages[] fill. glossary[] is usually EMPTY on these pages.
 
 On a ballot-measure page, route facts like this:
-- A measure type named in a heading or title — "... INITIATIVE STATUTE.", "... INITIATIVE CONSTITUTIONAL AMENDMENT.", "... Legislative Statute." — is a measureTypes[] entry. If the page states a signature requirement for that type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
+- A measure type named in a heading, a title, OR as a trailing phrase at the end of a measure's own line is a measureTypes[] entry. All of these name a type:
+    "CHILD SAFETY REQUIREMENTS FOR ARTIFICIAL INTELLIGENCE PRODUCTS. INITIATIVE STATUTE."   (end of an all-caps title)
+    "Authorizes Bonds for Housing Affordability Programs. Legislative Statute."             (end of a sentence-case line)
+    "Imposes One-Time Tax on Certain Taxpayers. Initiative Constitutional Amendment and Statute."  (a COMBINED type — emit it as its own type, not as two)
+  A list of propositions or measures where every line ends this way documents the FULL SET of types on that page: emit every distinct one you see, not just the first. If the page states a signature requirement for a type ("Signatures Required: 546,651"), put it on the measure type; do not leave it null.
 - A dated or named procedural milestone — "Raw Count Deadline", "Summary Date", "25% of Signatures Reached", "Failed 07/14/2026", "withdrawn by proponents", "eligible", "qualified for the ballot" — is a lifecycleStages[] entry.
 - NEITHER of those is a glossary entry. A term the page merely USES is not a glossary entry; a glossary entry requires a definition ON THE PAGE. If the page names "Raw Count Deadline" without explaining it, emit a lifecycle stage, not a glossary term.
 
