@@ -876,8 +876,8 @@ commentary outside the JSON. Every field below is required; use "" or
     "proposed": "Describe what the measure changes current law to."
   },
   "analysisSections": [
-    { "heading": "Findings and Declarations", "startOffset": 0, "endOffset": 1240 },
-    { "heading": "Operative Provisions",      "startOffset": 1240, "endOffset": 5400 }
+    { "heading": "A heading copied CHARACTER-FOR-CHARACTER out of FullText — see SECTIONING above. Never this sentence.", "startOffset": 0, "endOffset": 1240 },
+    { "heading": "The measure's next heading, in document order", "startOffset": 1240, "endOffset": 5400 }
   ],
   "analysisClaims": [
     {
@@ -2911,8 +2911,29 @@ export const CANONICAL_PROPOSITION_ANALYSIS_OFFSETS_TEXT =
 canonicalPropositionAnalysis.templateText = deriveQuotedClaimsContract(
   CANONICAL_PROPOSITION_ANALYSIS_OFFSETS_TEXT,
 );
-canonicalPropositionAnalysis.version = 3;
+canonicalPropositionAnalysis.version = 4;
 canonicalPropositionAnalysis.changeNote =
+  'v4 (opuspopuli, measured 2026-10-12 across the whole 71-measure corpus): ' +
+  'the OUTPUT FORMAT block illustrated analysisSections with two literal, ' +
+  'plausible headings — "Findings and Declarations" and "Operative ' +
+  'Provisions" — and nemotron-3.5-lightning returned EXACTLY that pair for ' +
+  '50 of 71 measures, on texts containing neither phrase. 67 of 71 came back ' +
+  'with exactly two sections. olmo-3.1:32b did it once in 54, on the same ' +
+  'documents and the same v3 bytes, so this is the illustration being copied ' +
+  'rather than the document read. It also breaks the consumer, which locates ' +
+  'a section by string-matching the heading against FullText: an invented ' +
+  'heading silently fails to anchor and the reader gets no table of contents ' +
+  'at all. Every OTHER field in that block already carried a descriptive ' +
+  'placeholder ("Describe the current state of the law…", "A yes vote means ' +
+  '[concrete change…]"); analysisSections was the one field showing an answer ' +
+  'instead of an instruction, so v4 brings it into line. The SECTIONING ' +
+  'rules above are UNCHANGED — they already required the heading to be a ' +
+  'verbatim substring of FullText, and compliance was 33.3% of headings on ' +
+  'documents that have their own, against 58.6% for olmo. Measured by the ' +
+  'section-heading grounding metric added to @opuspopuli/eval-harness ' +
+  '(scoring/sectioning.ts), which names the copied pair so a regression is ' +
+  'identifiable rather than merely visible as a lower rate. ' +
+  'PRIOR v3 NOTE: ' +
   'v3 (#114): yesOutcome and noOutcome were asymmetric by construction. The ' +
   'schema asked for a "concrete change" on one side and the "status quo" on ' +
   'the other — not symmetric tasks — and the neutrality rules governed ' +

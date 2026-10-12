@@ -39,6 +39,18 @@ const V2_HASH =
 const V3_HASH =
   'd62e7b0a144bafa1192fbb5c059f31250052b50b572c05c3d839bc98acde3cb7';
 
+/**
+ * v4 — replaces the two literal `analysisSections` headings in OUTPUT FORMAT
+ * with descriptive placeholders.
+ *
+ * nemotron-3.5-lightning returned the v3 example pair verbatim for 50 of 71
+ * live measures, on texts containing neither phrase; olmo-3.1:32b did it once
+ * in 54 on the same bytes. Moving the hash is again the cutover mechanism —
+ * every analysis stored under v3 is marked stale and regenerated.
+ */
+const V4_HASH =
+  'd8cec07ff987ef2345f1f1d2948a3763667d0f695956d7f5243e609961d0e36d';
+
 describe('proposition-analysis claim contracts (#1212)', () => {
   const canonical = byName(CANONICAL_PROPOSITION_ANALYSIS);
   const quoted = canonical;
@@ -51,7 +63,12 @@ describe('proposition-analysis claim contracts (#1212)', () => {
     // next generateMissing regenerates them under the new contract.
     it('serves the quoted contract, moving the hash off v1', () => {
       expect(sha256(canonical.templateText)).not.toBe(V1_HASH);
-      expect(sha256(canonical.templateText)).toBe(V3_HASH);
+      expect(sha256(canonical.templateText)).toBe(V4_HASH);
+    });
+
+    // Pinned so a revision cannot quietly reuse an earlier version's bytes.
+    it('is not the v3 text either', () => {
+      expect(sha256(canonical.templateText)).not.toBe(V3_HASH);
     });
 
     // Stated as an assertion rather than left implicit: the anchoring figures
@@ -63,8 +80,8 @@ describe('proposition-analysis claim contracts (#1212)', () => {
       expect(sha256(canonical.templateText)).not.toBe(V2_HASH);
     });
 
-    it('is version 3', () => {
-      expect(canonical.version).toBe(3);
+    it('is version 4', () => {
+      expect(canonical.version).toBe(4);
     });
 
     // v3 changes how the two OUTCOMES are written. It must not touch the
