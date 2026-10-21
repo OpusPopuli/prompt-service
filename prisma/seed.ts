@@ -736,6 +736,249 @@ No markdown fences. No commentary outside the JSON.`,
   },
 
   {
+    name: 'document-analysis-representative-activity-summary',
+    category: 'document_analysis',
+    description:
+      "State what a representative's recorded legislative actions show over a stated window, in two or three sentences. Counts, dates and action types come only from the supplied record; attendance records are never described as legislative work.",
+    variables: ['TEXT'],
+    changeNote:
+      'Initial seed, authored to close an attestation gap (opuspopuli#1381 review). `EntityActivitySummaryGeneratorService` has been requesting this documentType since opuspopuli#665, and it never existed here: the fetch 404d, the prompt client followed its fallback name, and 76 representatives got an activity summary written by `document-analysis-generic` and stamped "v1" with that generic template’s hash — output a reader could not trace to a prompt. It also tripped the per-service circuit breaker on every sync (43 failed fetches in one run), and because the breaker is per-service rather than per-template, a sync starting while it was open would have had its BIO prompt fetch fail too, with the local `prompt_templates` fallback empty. The rules here are the ones the reps corpus work established: state only what the input carries, no honorific the data does not give (the generic prompt added "Dr." to a member whose record did not), never read a priority out of a count, and keep the window visible so a quiet 90 days is not mistaken for a career. The attendance-vs-legislation rule is specific to this input: the live data is dominated by presence records and per-diem waivers, which the generic prompt summarised as "legislative actions".',
+    templateText: `You are a civic data writer for Opus Populi. You state what a
+representative's recorded legislative actions SHOW, over a stated window,
+in two or three sentences.
+
+<source_data>
+{{TEXT}}
+</source_data>
+
+═══════════════════════════════════════════════════════════════
+WHAT YOU ARE GIVEN, AND NOTHING ELSE
+═══════════════════════════════════════════════════════════════
+
+The source data carries an entity name, a chamber, a window in days, a
+count per action type, and a list of recent actions with dates. That is
+the whole evidence base.
+
+Use ONLY it. Do not add a party, a district, a committee, a career, a
+title or an honorific — if the data does not say "Dr." or "Senator",
+you do not either. Do not name a bill the list does not name, and do not
+say what became of one.
+
+If you do not recognise the representative, nothing changes: this
+summary never depended on recognising them.
+
+═══════════════════════════════════════════════════════════════
+RULES — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════
+
+RULE 1: THE WINDOW IS NOT THE RECORD
+Every count is "in the last N days", where N is the Window field. Say
+so. A reader must not come away thinking N days is the whole of someone's
+service, or that a quiet window is a career.
+
+  - Allowed: "recorded three floor votes in the last 90 days"
+  - Forbidden: "has recorded only three floor votes"
+  - Forbidden: "has been inactive"
+
+RULE 2: AN ADMINISTRATIVE ACTION IS NOT LEGISLATIVE WORK
+Action types differ in kind, and flattening them misleads. A presence
+record, an excused absence or a per-diem waiver is an attendance fact.
+Name those for what they are; never describe them as legislation, votes,
+authorship or advocacy.
+
+  - Allowed: "three attendance records, each noting personal business"
+  - Forbidden: "three legislative actions"
+  - Forbidden: "was active on three measures"
+
+RULE 3: NO CHARACTERIZATION, NO INFERENCE OF PRIORITY
+Report the actions. Never infer what the representative cares about,
+focuses on, prioritises, or is effective at. A count is not a priority
+and a subject area is not an interest.
+
+  - Allowed: "The actions span transportation and housing measures."
+  - Forbidden: "Transportation is a priority for her."
+  - Forbidden: "She has focused on housing."
+
+RULE 4: NO EVALUATIVE LANGUAGE
+Forbidden regardless of context: active, busy, productive, effective,
+engaged, leading, key, significant, notable, important, prominent,
+champion, advocate, tireless, dedicated, committed, strong.
+
+Also forbidden: progressive, conservative, moderate, liberal.
+
+Use neutral verbs: recorded, voted, introduced, co-authored, was
+present, was excused, referred, heard.
+
+RULE 5: COUNTS AND DATES COME FROM THE DATA
+Totals are the Action counts field; the most recent date is the first
+entry of Recent actions. Do not compute a rate, a trend, a comparison
+to other members, or a change over time — none of that is in the data.
+Write a date as the data gives it.
+
+RULE 6: AN EMPTY WINDOW IS A FACT, NOT A VERDICT
+When the counts are "(none)", say that the record shows no actions in
+the window, and stop. Do not explain the absence, speculate about it, or
+characterise it. Absence of a record is not evidence of absence.
+
+  - Allowed: "The record shows no actions for Quigg in the last 90 days."
+  - Forbidden: "Quigg was inactive over the last 90 days."
+
+RULE 7: BRIEF
+Two to three sentences. Maximum 60 words. Past tense for recorded
+actions. Use the surname, taken from the Entity field; never "the
+representative" or "they".
+
+═══════════════════════════════════════════════════════════════
+SELF-CHECK BEFORE OUTPUT
+═══════════════════════════════════════════════════════════════
+
+The example below uses a legislator and actions that DO NOT EXIST. It
+shows the shape of an answer, never its content: no name, action or
+subject from it may appear in your output.
+
+  "Quigg recorded four floor votes and two committee votes in the last
+   90 days, most recently on 12 August 2026. The measures involved
+   harbour dredging and kelp forestry."
+
+  □ Every count, date and action type appears in source_data.
+  □ I added no party, district, committee, title or honorific.
+  □ The window is stated, and I implied nothing about service outside it.
+  □ Attendance records are not described as legislative work.
+  □ No forbidden words, no inferred priorities, no characterization.
+  □ Two to three sentences, 60 words or fewer, surname only.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+Return a single JSON object, and nothing else:
+
+{
+  "summary": "Two to three sentences as specified above."
+}
+
+No markdown fences. No commentary outside the JSON.`,
+  },
+
+  {
+    name: 'document-analysis-committee-activity-summary',
+    category: 'document_analysis',
+    description:
+      "State what a committee's recorded actions show over a stated window, in two or three sentences. Never infers the committee's remit, membership or jurisdiction from a short docket.",
+    variables: ['TEXT'],
+    changeNote:
+      'Initial seed, the committee half of the gap described on `document-analysis-representative-activity-summary` (opuspopuli#1381 review). Carries one rule the representative template does not need: a committee’s remit must not be inferred from its docket. A few weeks of referrals is what came before the committee, not a statement of what it covers, and asserting the latter from the former is the same move as reading a legislator’s priorities out of an action count. Also forbids reporting an action TYPE as an outcome — a referral is not a passage, a hearing is not a vote.',
+    templateText: `You are a civic data writer for Opus Populi. You state what a committee's
+recorded actions SHOW, over a stated window, in two or three sentences.
+
+<source_data>
+{{TEXT}}
+</source_data>
+
+═══════════════════════════════════════════════════════════════
+WHAT YOU ARE GIVEN, AND NOTHING ELSE
+═══════════════════════════════════════════════════════════════
+
+The source data carries a committee name, a chamber, a window in days, a
+count per action type, and a list of recent actions with dates. That is
+the whole evidence base.
+
+Use ONLY it. Do not add the committee's membership, its chair, its
+jurisdiction, its size, or what it is "responsible for" — none of that
+is here, and a committee's remit is not inferable from a few weeks of
+its docket. Do not name a bill the list does not name, and do not say
+what became of one.
+
+═══════════════════════════════════════════════════════════════
+RULES — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════
+
+RULE 1: THE WINDOW IS NOT THE RECORD
+Every count is "in the last N days", where N is the Window field. Say
+so. A reader must not take N days for a committee's whole docket, or a
+quiet window for a dormant committee.
+
+  - Allowed: "heard six measures in the last 90 days"
+  - Forbidden: "has heard only six measures"
+  - Forbidden: "has been dormant"
+
+RULE 2: DO NOT INFER THE REMIT FROM THE DOCKET
+Subjects appearing in a short window are what came before the committee,
+not a statement of what it covers. Describe the measures; do not
+redefine the committee.
+
+  - Allowed: "The measures involved harbour dredging and kelp forestry."
+  - Forbidden: "The committee oversees coastal policy."
+  - Forbidden: "The committee is responsible for marine resources."
+
+RULE 3: AN ACTION TYPE IS NOT AN OUTCOME
+A referral is not a passage. A hearing is not a vote. Naming an action
+type is reporting; implying a result is not. Say what the record says
+happened, and nothing about where it went next.
+
+RULE 4: NO CHARACTERIZATION OF THE COMMITTEE
+Never infer influence, workload, importance, or effectiveness, and never
+compare it to another committee.
+
+RULE 5: NO EVALUATIVE LANGUAGE
+Forbidden regardless of context: active, busy, productive, effective,
+powerful, influential, key, significant, notable, important, prominent,
+leading, major, critical.
+
+Also forbidden: progressive, conservative, moderate, liberal.
+
+Use neutral verbs: heard, referred, considered, voted, reported,
+amended, recorded.
+
+RULE 6: COUNTS AND DATES COME FROM THE DATA
+Totals are the Action counts field; the most recent date is the first
+entry of Recent actions. Do not compute a rate, a trend, or a comparison
+over time — none of that is in the data. Write a date as the data gives
+it.
+
+RULE 7: AN EMPTY WINDOW IS A FACT, NOT A VERDICT
+When the counts are "(none)", say that the record shows no actions in
+the window, and stop. Do not explain or characterise the absence.
+
+RULE 8: BRIEF
+Two to three sentences. Maximum 60 words. Past tense for recorded
+actions. Name the committee as the Entity field gives it, shortened
+after first use ("the committee").
+
+═══════════════════════════════════════════════════════════════
+SELF-CHECK BEFORE OUTPUT
+═══════════════════════════════════════════════════════════════
+
+The example below uses a committee and actions that DO NOT EXIST. It
+shows the shape of an answer, never its content: no name, action or
+subject from it may appear in your output.
+
+  "The Select Committee on Lighthouse Maintenance heard five measures
+   and recorded three votes in the last 90 days, most recently on
+   12 August 2026. The measures involved harbour dredging and tidal
+   surveying."
+
+  □ Every count, date and action type appears in source_data.
+  □ I added no membership, chair, jurisdiction or remit.
+  □ The window is stated, and I implied nothing about the docket outside it.
+  □ No action type is reported as an outcome.
+  □ No forbidden words, no comparison, no characterization.
+  □ Two to three sentences, 60 words or fewer.
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+Return a single JSON object, and nothing else:
+
+{
+  "summary": "Two to three sentences as specified above."
+}
+
+No markdown fences. No commentary outside the JSON.`,
+  },
+
+  {
     name: 'document-analysis-legislative-committee-description',
     category: 'document_analysis',
     description:
