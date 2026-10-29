@@ -242,6 +242,101 @@ Respond with ONLY valid JSON matching this exact structure (no markdown, no expl
   },
 
   // ============================================
+  // PDF TEXT RULES (scraping pipeline, sourceType "pdf")
+  // ============================================
+  // Moved from opuspopuli's PdfExtractHandler (opuspopuli#1414), byte for
+  // byte: seed-pdf-text-rules.spec.ts pins the composed prompt against the
+  // inline builder it replaces. The model writes regex/line extraction rules
+  // for a PDF's text, the PDF counterpart of `structural-analysis`.
+  {
+    name: 'pdf-text-rules',
+    category: 'structural_analysis',
+    description:
+      'Text extraction rule generation for PDF sources: the model reads extracted PDF text and returns an item delimiter plus regex field mappings',
+    variables: [
+      'CONTENT_GOAL',
+      'DATA_TYPE',
+      'HINTS_SECTION',
+      'REQUIRED_FIELDS',
+      'TEXT',
+    ],
+    templateText: `You are a data extraction specialist. Analyze the following PDF text content and produce JSON extraction rules.
+
+## Goal
+{{CONTENT_GOAL}}
+
+## Data type
+{{DATA_TYPE}}
+
+{{HINTS_SECTION}}## Instructions
+Produce a JSON object with these fields:
+- "itemDelimiter": A regex pattern that separates individual items/records in the text
+- "fieldMappings": An array of field extraction rules, each with:
+  - "fieldName": The domain model field name (e.g., "title", "scheduledAt", "externalId", "location")
+  - "pattern": A regex pattern with capture groups to extract the value from each item block
+  - "captureGroup": Which capture group contains the value (default: 1)
+  - "required": Whether this field must be present (true/false)
+  - "defaultValue": Optional default if pattern doesn't match
+- "dataSectionStart": Optional regex to find where the actual data begins (skip headers/preamble)
+- "dataSectionEnd": Optional regex to find where the data ends
+- "skipLines": Number of lines to skip from the top
+- "analysisNotes": Brief notes about the text structure
+
+Required fields for "{{DATA_TYPE}}":
+{{REQUIRED_FIELDS}}
+
+Respond with ONLY valid JSON, no markdown fences or explanation.
+
+## PDF Text Content
+{{TEXT}}`,
+  },
+
+  {
+    name: 'pdf-text-rules-fields-meetings',
+    category: 'structural_analysis',
+    description: 'Required fields for meeting/hearing PDF text rules',
+    variables: [],
+    templateText: `- externalId (unique identifier)
+- title (committee/meeting name)
+- scheduledAt (date and time)
+- body (e.g., 'Senate', 'Assembly')
+- location (room/address, optional)`,
+  },
+
+  {
+    name: 'pdf-text-rules-fields-propositions',
+    category: 'structural_analysis',
+    description:
+      'Required fields for proposition/ballot measure PDF text rules',
+    variables: [],
+    templateText: `- externalId (bill/measure ID)
+- title
+- status (optional)`,
+  },
+
+  {
+    name: 'pdf-text-rules-fields-representatives',
+    category: 'structural_analysis',
+    description: 'Required fields for representative/legislator PDF text rules',
+    variables: [],
+    templateText: `- externalId
+- name
+- chamber
+- district
+- party`,
+  },
+
+  {
+    name: 'pdf-text-rules-fields-default',
+    category: 'structural_analysis',
+    description:
+      'Required fields for PDF text rules on a data type with no fields template of its own',
+    variables: ['DATA_TYPE'],
+    templateText: `- externalId
+- relevant fields for {{DATA_TYPE}}`,
+  },
+
+  // ============================================
   // DOCUMENT ANALYSIS (documents service)
   // ============================================
   {
