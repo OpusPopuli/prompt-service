@@ -12,6 +12,60 @@ reconstructed.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+
+The templates `opuspopuli` v2.0.0 calls. **Deploy this release before that
+backend**, and don't restart the container after seeding: the boot re-seed
+can overwrite newer template text while leaving the version number unchanged.
+
+### Added
+
+- **OCR transcription instructions**: two named templates, for two kinds of
+  model, served from here instead of inline in the client
+  ([#110](https://github.com/OpusPopuli/prompt-service/pull/110);
+  opuspopuli#1234, opuspopuli#1245).
+- **PDF text rules**: five `structural_analysis` templates at v1. This was the
+  last inline LLM prompt in opuspopuli
+  ([#124](https://github.com/OpusPopuli/prompt-service/pull/124);
+  opuspopuli#1414).
+- **`minutes-summary`** v1, restored. It was removed from opuspopuli by #1246
+  and never seeded here. Since then minutes summaries had fallen back to the
+  generic prompt and carried no claims
+  ([#125](https://github.com/OpusPopuli/prompt-service/pull/125)).
+- **The two representative activity templates**, which had never existed
+  ([#122](https://github.com/OpusPopuli/prompt-service/pull/122)).
+
+### Changed
+
+- **`document-analysis-proposition-analysis`**:
+  - **v2**: quote-then-locate. The model quotes its evidence and code locates
+    the quote ([#111](https://github.com/OpusPopuli/prompt-service/pull/111),
+    [#113](https://github.com/OpusPopuli/prompt-service/pull/113);
+    opuspopuli#1212).
+  - **v3**: the two ballot outcomes are written symmetrically
+    ([#115](https://github.com/OpusPopuli/prompt-service/pull/115), #114).
+  - **v4**: shows the rule instead of an example answer the model copied
+    ([#121](https://github.com/OpusPopuli/prompt-service/pull/121);
+    opuspopuli#1358).
+- **Civics extraction**:
+  - **v2**: says which field a fact belongs in
+    ([#116](https://github.com/OpusPopuli/prompt-service/pull/116)).
+  - **v3**: a measure type can be named at the end of a line
+    ([#117](https://github.com/OpusPopuli/prompt-service/pull/117)).
+  - **v5**: a lifecycle stage is neither a section heading nor a glossary term
+    ([#119](https://github.com/OpusPopuli/prompt-service/pull/119)).
+  - **v6**: keeps the page's words and escapes the page's quotes
+    ([#120](https://github.com/OpusPopuli/prompt-service/pull/120)).
+  - Measured against the opuspopuli gold set (opuspopuli#1332, #1333).
+- **`representative-bio` v2**: grounded in source data only, with no "general
+  knowledge". Committee chairs are rendered by code, not asked of the model
+  ([#122](https://github.com/OpusPopuli/prompt-service/pull/122)).
+
+### Fixed
+
+- **Image builds**: pnpm is pinned to 9.15.9, because `@latest` broke every
+  image build ([#112](https://github.com/OpusPopuli/prompt-service/pull/112)).
+
 ## [0.4.0] - 2026-08-23
 
 ### Changed
