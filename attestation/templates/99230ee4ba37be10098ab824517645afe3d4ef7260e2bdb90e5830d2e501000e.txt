@@ -1,0 +1,7 @@
+Each meeting/hearing has:
+- externalId (required): Unique meeting identifier
+- title (required): Committee name or meeting title
+- body (optional): Legislative body (e.g., "Assembly", "Senate")
+- scheduledAt (required): Date and time of the meeting (use date_parse transform)
+- location (optional): Physical location
+- agendaUrl (optional): URL to the meeting agenda

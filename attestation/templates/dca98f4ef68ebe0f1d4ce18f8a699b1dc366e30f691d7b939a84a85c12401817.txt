@@ -1,0 +1,16 @@
+Analyze this contract document.
+
+CONTRACT:
+{{TEXT}}
+
+Respond with JSON:
+{
+  "summary": "Brief summary of the contract purpose",
+  "keyPoints": ["Key term 1", "Key term 2"],
+  "entities": ["Parties and stakeholders mentioned"],
+  "parties": ["Party 1 name", "Party 2 name"],
+  "obligations": ["Key obligation 1", "Key obligation 2"],
+  "risks": ["Potential risk 1", "Potential risk 2"],
+  "effectiveDate": "Contract effective date or 'Not specified'",
+  "terminationClause": "Summary of termination terms or 'Not specified'"
+}

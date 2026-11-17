@@ -4,16 +4,17 @@ This document is intended for security auditors, privacy reviewers, and anyone e
 
 ## What This Service Is
 
-The Prompt Service is a private API that serves AI prompt templates to Opus Populi nodes. It is the single source of truth for all prompts used in document analysis, web scraping, and knowledge retrieval.
+The Prompt Service is an authenticated API that serves AI prompt templates to Opus Populi nodes. It is the single source of truth for all prompts used in document analysis, web scraping, and knowledge retrieval.
 
 It does **not** run AI models. It does **not** process user documents. It does **not** store user data. It composes prompt text from templates and returns it to nodes, which then send that text to their local LLM.
 
-## Trust Model: Glass Box Behavior, Black Box Implementation
+## Trust Model: Published Prompts, Private Runtime State
 
-Opus Populi follows a "glass box behavior, black box implementation" model:
+Opus Populi publishes its prompt text ([opuspopuli#1143](https://github.com/OpusPopuli/opuspopuli/issues/1143)):
 
-- **Glass box**: Users see what the AI does — summaries, key points, entities, impact analysis. The methodology is documented publicly in the Prompt Service Charter. Analysis results include source provenance and prompt version identifiers.
-- **Black box**: The specific prompt templates are private. Users cannot see the exact wording that instructs the LLM, which prevents gaming and ensures consistent quality across the federated network.
+- **Published**: Every template seeded from this repository's `main` branch is in [`attestation/`](attestation/README.md), byte for byte, named by its sha256. Every AI output records that hash, so a reader can find the exact prompt behind it and recompute the hash. The test suite verifies the record is complete and untampered; CI rejects a pull request that removes or relabels anything already published.
+- **Not yet covered**: Text created through the admin API, and experiment variants, are served without passing through `prisma/seed.ts`, so their hashes are not in the record. An output made from one shows as "not in the public record" rather than resolving. Production served none as of 2026-11-17 (46 of 46 recorded versions published, no experiment variants). Enforcing this in the API is [#127](https://github.com/OpusPopuli/prompt-service/issues/127).
+- **Private**: Runtime state, not code — which node is in which experiment arm, per-region tuning values, and the API keys. The service itself requires authentication; the text it serves does not need to be secret.
 
 ## Authentication & Authorization
 

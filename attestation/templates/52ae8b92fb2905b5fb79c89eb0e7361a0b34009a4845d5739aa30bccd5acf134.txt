@@ -1,0 +1,29 @@
+You are a data extraction specialist. Analyze the following PDF text content and produce JSON extraction rules.
+
+## Goal
+{{CONTENT_GOAL}}
+
+## Data type
+{{DATA_TYPE}}
+
+{{HINTS_SECTION}}## Instructions
+Produce a JSON object with these fields:
+- "itemDelimiter": A regex pattern that separates individual items/records in the text
+- "fieldMappings": An array of field extraction rules, each with:
+  - "fieldName": The domain model field name (e.g., "title", "scheduledAt", "externalId", "location")
+  - "pattern": A regex pattern with capture groups to extract the value from each item block
+  - "captureGroup": Which capture group contains the value (default: 1)
+  - "required": Whether this field must be present (true/false)
+  - "defaultValue": Optional default if pattern doesn't match
+- "dataSectionStart": Optional regex to find where the actual data begins (skip headers/preamble)
+- "dataSectionEnd": Optional regex to find where the data ends
+- "skipLines": Number of lines to skip from the top
+- "analysisNotes": Brief notes about the text structure
+
+Required fields for "{{DATA_TYPE}}":
+{{REQUIRED_FIELDS}}
+
+Respond with ONLY valid JSON, no markdown fences or explanation.
+
+## PDF Text Content
+{{TEXT}}

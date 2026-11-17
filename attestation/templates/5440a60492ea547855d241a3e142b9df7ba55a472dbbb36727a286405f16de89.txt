@@ -1,0 +1,5 @@
+- externalId (unique identifier)
+- title (committee/meeting name)
+- scheduledAt (date and time)
+- body (e.g., 'Senate', 'Assembly')
+- location (room/address, optional)

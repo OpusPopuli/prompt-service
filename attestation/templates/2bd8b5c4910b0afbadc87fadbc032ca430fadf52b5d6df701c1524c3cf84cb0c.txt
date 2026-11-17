@@ -1,0 +1,1 @@
+Extract all relevant structured data fields from each item.

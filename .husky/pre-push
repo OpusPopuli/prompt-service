@@ -131,7 +131,7 @@ else
   echo ""
   echo "Running AI security review..."
 
-  SEC_RESULT=$("$CLAUDE" --print "You are a security-focused pre-push gate for the Opus Populi prompt-service (private NestJS microservice; HMAC-authenticated; serves proprietary AI prompt templates).
+  SEC_RESULT=$("$CLAUDE" --print "You are a security-focused pre-push gate for the Opus Populi prompt-service (NestJS microservice; HMAC-authenticated; serves AI prompt templates whose text is public by design, published in attestation/ — the template text is NOT a secret, but API keys, HMAC secrets and runtime database contents are).
 
 Analyze the following git diff for HIGH-CONFIDENCE security vulnerabilities only. Ignore theoretical issues, rate limiting, and DoS concerns.
 

@@ -1,0 +1,3 @@
+- externalId (bill/measure ID)
+- title
+- status (optional)

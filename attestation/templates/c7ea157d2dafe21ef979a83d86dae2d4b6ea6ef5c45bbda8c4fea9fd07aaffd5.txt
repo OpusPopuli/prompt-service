@@ -1,0 +1,7 @@
+Each proposition/ballot measure has:
+- externalId (required): Unique measure identifier (e.g., "ACA-13", "SB-42", "PROP-36")
+- title (required): Measure title or description
+- summary (optional): Longer summary or full description text
+- status (optional): Current status (default: "pending")
+- electionDate (optional): Date of the election (use date_parse transform)
+- sourceUrl (optional): URL to source document or PDF

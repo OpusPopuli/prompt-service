@@ -1,0 +1,14 @@
+Analyze this form document.
+
+FORM:
+{{TEXT}}
+
+Respond with JSON:
+{
+  "summary": "What this form is for",
+  "keyPoints": ["Important instruction 1", "Important instruction 2"],
+  "entities": ["Issuing organization, departments mentioned"],
+  "requiredFields": ["Required field 1", "Required field 2"],
+  "purpose": "The purpose of this form",
+  "submissionDeadline": "Any deadline mentioned or 'Not specified'"
+}
