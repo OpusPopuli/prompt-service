@@ -1,17 +1,17 @@
 # Opus Populi Prompt Service
 
-Private AI Prompt Service for the Opus Populi civic technology platform. This service owns all AI prompt templates and serves them via authenticated API to federated nodes.
+AI prompt service for the Opus Populi civic technology platform. This service owns all AI prompt templates and serves them via authenticated API to federated nodes.
 
-**This is a private repository.** Prompt templates are proprietary intellectual property — the quality and neutrality guarantees that make the federated network trustworthy. See [SECURITY.md](SECURITY.md) for the trust model.
+**The prompt text is public** ([opuspopuli#1143](https://github.com/OpusPopuli/opuspopuli/issues/1143)). Every template seeded from this repository's `main` branch is published, byte for byte, in [`attestation/`](attestation/README.md), named by its sha256. Every AI output in Opus Populi records that hash, so a reader can trace an output to the exact prompt that produced it and check it themselves. A text that never went through `prisma/seed.ts` — one created through the admin API, or an experiment variant — has no entry, and its hash will not resolve; see [what the record does not cover](attestation/README.md#what-it-does-not-cover). What stays private is runtime state, not code: live experiment assignments and per-region tuning in the deployed service's database. See [SECURITY.md](SECURITY.md) for the trust model.
 
 ## Why a Separate Service?
 
-Opus Populi is open source. The analysis pipeline, scraping framework, and frontend are all publicly auditable. But prompt templates are private because:
+Opus Populi is open source, and so is the prompt text. Prompts are still *served* from one place rather than bundled into each node, because:
 
 - **Consistency**: Every federated node gets identical prompts, ensuring uniform analysis quality
-- **Integrity**: Nodes cannot modify prompts to bias analysis results
-- **Quality**: Prompts can be improved continuously without disrupting the network
-- **Anti-gaming**: Studying prompt internals would allow adversaries to craft documents that exploit analysis patterns
+- **Integrity**: An altered prompt is detectable — its hash is one the public record does not hold
+- **Quality**: Prompts can be improved continuously without redeploying the network
+- **Attestation**: Each version is recorded with its hash, so every output stays attributable after the prompt is revised
 
 The open-source `prompt-client` package in the main repo already supports remote mode — when `PROMPT_SERVICE_URL` is configured, it delegates to this service instead of reading templates from its local database.
 
@@ -172,7 +172,9 @@ Interactive API docs are available at `http://localhost:3200/api` (Swagger UI).
 | `pnpm db:generate` | Generate Prisma client |
 | `pnpm db:migrate` | Create and run migrations |
 | `pnpm db:migrate:deploy` | Run pending migrations (production) |
-| `pnpm db:seed` | Seed all 21 prompt templates |
+| `pnpm db:seed` | Seed the prompt templates |
+| `pnpm attestation:generate` | Publish changed templates to the attestation record (run after editing `prisma/seed.ts`) |
+| `pnpm attestation:check` | Verify the attestation record |
 | `pnpm db:studio` | Open Prisma Studio GUI |
 | `pnpm integration:up` | Start integration test stack (Docker) |
 | `pnpm integration:down` | Tear down integration test stack |
@@ -185,7 +187,8 @@ Interactive API docs are available at `http://localhost:3200/api` (Swagger UI).
 prompt-service/
 ├── prisma/
 │   ├── schema.prisma          # Database schema (templates, versions, experiments)
-│   └── seed.ts                # Seeds all 21 prompt templates
+│   └── seed.ts                # Seeds the prompt templates (the source of truth)
+├── attestation/               # Public record: every published template, by sha256
 ├── src/
 │   ├── auth/
 │   │   ├── api-key.guard.ts   # Node auth: Bearer tokens + HMAC request signing
@@ -244,38 +247,27 @@ For local dev with hot reload, use `docker-compose.yml` (builds from source) or 
 
 ## Prompt Templates
 
-The service ships with 21 seeded templates across 5 categories:
+Templates are defined in [`prisma/seed.ts`](prisma/seed.ts). The complete list — every
+template, every published version — is [`attestation/manifest.json`](attestation/manifest.json).
 
-**Structural Analysis** (7 templates) — Used by the scraping pipeline to extract structured data from web pages:
-- `structural-analysis` — Base extraction rules template
-- `structural-schema-propositions` — Ballot measure schema
-- `structural-schema-meetings` — Meeting/hearing schema
-- `structural-schema-representatives` — Legislator schema
-- `structural-schema-campaign_finance` — Campaign finance contribution schema
-- `structural-schema-lobbying` — Lobbying filing schema
-- `structural-schema-default` — Fallback for unknown types
+| Category | Used for |
+|----------|----------|
+| `structural_analysis` | Scraping pipeline: extracting structured data from web pages |
+| `document_analysis` | Propositions, bills, representatives, committees, minutes, uploaded documents |
+| `rag` | Context-grounded answers for knowledge retrieval |
+| `civics_extraction` | Civic-process data (chambers, measure types, lifecycle stages, glossary) from official pages |
+| `bill_extraction` | Legislative bill and vote records |
 
-**Document Analysis** (10 templates) — Used to analyze uploaded documents:
-- `document-analysis-base-instructions` — Shared civic platform context and JSON-only output instructions
-- `document-analysis-generic` — Generic document analysis
-- `document-analysis-petition` — Petition analysis (nonpartisan)
-- `document-analysis-proposition` — Ballot proposition quick-metadata extraction
-- `document-analysis-proposition-analysis` — Full detail-page analysis with citations and section anchors
-- `document-analysis-representative-bio` — Legislator biography generation with claim attribution
-- `document-analysis-representative-committees-summary` — Committee assignment summary
-- `document-analysis-legislative-committee-description` — Committee function description
-- `document-analysis-contract` — Contract analysis
-- `document-analysis-form` — Form analysis
+### Verifying a prompt
 
-**RAG** (1 template) — Used for knowledge retrieval Q&A:
-- `rag` — Context-grounded answer generation
+An Opus Populi output's receipt shows its prompt hash. The text that produced it is
+`attestation/templates/<hash>.txt`, and the file's name is the hash of its own bytes:
 
-**Civics Extraction** (1 template) — Used to extract structured civic-process data:
-- `civics-extraction` — Extracts `CivicsBlock` (chambers, measure types, lifecycle stages, glossary) from official government pages
+```bash
+shasum -a 256 attestation/templates/<hash>.txt   # prints <hash>
+```
 
-**Bill Extraction** (2 templates) — Used by the bill ingest pipeline:
-- `bill-extraction` — Extracts a structured Bill record from a legislature bill status page
-- `bill-votes-extraction` — Extracts roll-call vote records from a legislature bill votes page
+See [`attestation/README.md`](attestation/README.md).
 
 ## Postman Collection
 
@@ -304,11 +296,13 @@ The open-source `prompt-client` package connects to this service when `PROMPT_SE
 │  │ Service      │    │  └─ No  → local DB read   │   │
 │  ├──────────────┤    │                           │   │
 │  │ Knowledge    │───▸│ Fallback chain:           │   │
-│  │ Service      │    │  remote → DB → hardcoded  │   │
+│  │ Service      │    │  remote → local DB        │   │
 │  └──────────────┘    └──────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## License
 
-UNLICENSED — Private and proprietary. Not for distribution.
+GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) file for details.
+
+This matches the rest of Opus Populi. For commercial licensing options, see [LICENSE-COMMERCIAL.md](https://github.com/OpusPopuli/opuspopuli/blob/main/LICENSE-COMMERCIAL.md) in the main repository.

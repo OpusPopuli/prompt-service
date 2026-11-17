@@ -1,0 +1,2 @@
+- externalId
+- relevant fields for {{DATA_TYPE}}

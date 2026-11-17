@@ -1,0 +1,762 @@
+{
+  "schemaVersion": 1,
+  "hashAlgorithm": "sha256",
+  "grandfatheredLabels": [
+    {
+      "name": "bill-extraction",
+      "version": 1
+    },
+    {
+      "name": "civics-extraction",
+      "version": 1
+    },
+    {
+      "name": "civics-extraction-compact",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-base-instructions",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-contract",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-form",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-generic",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-petition",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-proposition",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-proposition-analysis",
+      "version": 1
+    },
+    {
+      "name": "document-analysis-representative-bio",
+      "version": 1
+    },
+    {
+      "name": "rag",
+      "version": 1
+    },
+    {
+      "name": "structural-analysis",
+      "version": 1
+    },
+    {
+      "name": "structural-schema-representatives",
+      "version": 1
+    }
+  ],
+  "entries": [
+    {
+      "hash": "001fb54536386303c57e4771a04211d6d39950d76f2c632ef25b8abfe689040b",
+      "bytes": 440,
+      "labels": [
+        {
+          "name": "rag",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "042deac252d8bf64ee82dcef670a094f63ae398562fad20348e9db4e745e21a3",
+      "bytes": 11456,
+      "labels": [
+        {
+          "name": "civics-extraction-compact",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "085353a2b1033ea7cea9186621e3662b0ea663cf0ab89f37de3b9478ea946c16",
+      "bytes": 41,
+      "labels": [
+        {
+          "name": "ocr-transcription-document",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "0b981bb596b5b757be30eb4dd6f9c54327b071e99212585bc43d727d08c4199d",
+      "bytes": 679,
+      "labels": [
+        {
+          "name": "document-analysis-generic",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "0f11dfcf333144a0fa6f873d2383e86fdf8b14c20f63d1c8fce5e470340603fc",
+      "bytes": 2176,
+      "labels": [
+        {
+          "name": "document-analysis-minutes-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "176855cbc7d7633fd0d6cfb1c5df7284362a38bee74b38b84bc66e2d386ef55f",
+      "bytes": 612,
+      "labels": [
+        {
+          "name": "document-analysis-proposition",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "1d0587085360ec708ba1ba4b3d083d5ac77b5af7e5db33b7caec0f016f1b5903",
+      "bytes": 7737,
+      "labels": [
+        {
+          "name": "document-analysis-proposition-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "1eeadb40280f7220a798588a1ae41cd445fcc0eb431ffb238eea53bf076298fc",
+      "bytes": 8975,
+      "labels": [
+        {
+          "name": "briefing-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "20bbfbd83b8f352ea88e9ec33ee7b6c3f00c14b2b0b3a6c1d6fdd89ef838d728",
+      "bytes": 11195,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "2bd8b5c4910b0afbadc87fadbc032ca430fadf52b5d6df701c1524c3cf84cb0c",
+      "bytes": 59,
+      "labels": [
+        {
+          "name": "structural-schema-default",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "3201099f7135421f08502ad981e9fbc1f1f0fb55eb7cdc87e8df3d40113f52ed",
+      "bytes": 3340,
+      "labels": [
+        {
+          "name": "structural-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "325e3f7d05d597fc55470819c32b340bf1a18e8319a8bf99d8040ede3e7f7d9f",
+      "bytes": 1849,
+      "labels": [
+        {
+          "name": "structural-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "33ab7079683d844ba4b2fc4a6bf569539e3e4b8eb32780991414ce23727d8ed1",
+      "bytes": 7196,
+      "labels": [
+        {
+          "name": "document-analysis-representative-bio",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "34ad94809bb446de4a24ba74acbb8b00a2edb55e700023b1dcd03aedbc3c5d8a",
+      "bytes": 981,
+      "labels": [
+        {
+          "name": "document-analysis-contract",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "360755ad7d6ee411d2be28e417e84397f984b03cee945d0cfe586b3fe617871c",
+      "bytes": 5334,
+      "labels": [
+        {
+          "name": "document-analysis-committee-activity-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "367954e33a0be82cfa6cee875d4e820789ad5fe7dded8a1ec8f254d5940bcc94",
+      "bytes": 15453,
+      "labels": [
+        {
+          "name": "civics-extraction-compact",
+          "version": 5
+        }
+      ]
+    },
+    {
+      "hash": "3a082a2fd8c4d571ff2a6617bd321b594bd4ccceecb7ba5580ac6a4a13b17ef6",
+      "bytes": 5882,
+      "labels": [
+        {
+          "name": "personalized-impact",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "3ce1d39dd1822339de446b24a66a483948c01a576a0720616f5f017f1e2f1b29",
+      "bytes": 3476,
+      "labels": [
+        {
+          "name": "structural-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "42a323f29127b144be67c11915f9553019e1a2d460ebbafae522e00235ee5a15",
+      "bytes": 8031,
+      "labels": [
+        {
+          "name": "representative-relevance-explanation",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "43888e8f8c1847dffb2fb1459c42820830b2b2589ff152c2dba8071b694d96f0",
+      "bytes": 627,
+      "labels": [
+        {
+          "name": "structural-schema-representatives",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "462d1f772b9fd54a8f4dd1c5219b0c25207287f51752ff6fe1c785f931f62f92",
+      "bytes": 352,
+      "labels": [
+        {
+          "name": "document-analysis-base-instructions",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "4a5e7dd1c83a0117bcd9801edc962a41a059cc961268d19363e2955423cf2d16",
+      "bytes": 4371,
+      "labels": [
+        {
+          "name": "document-analysis-legislative-committee-description",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "52ae8b92fb2905b5fb79c89eb0e7361a0b34009a4845d5739aa30bccd5acf134",
+      "bytes": 1209,
+      "labels": [
+        {
+          "name": "pdf-text-rules",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "5440a60492ea547855d241a3e142b9df7ba55a472dbbb36727a286405f16de89",
+      "bytes": 167,
+      "labels": [
+        {
+          "name": "pdf-text-rules-fields-meetings",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "5a4a4d3d521dee1add2821b3ca47b1e3d2c8db401da04eb78efe02a99e57157e",
+      "bytes": 16074,
+      "labels": [
+        {
+          "name": "civics-extraction-compact",
+          "version": 6
+        }
+      ]
+    },
+    {
+      "hash": "5c27303154854c015f58f6edcdba91e12cf344ff6696feeb7a0e8643baee908a",
+      "bytes": 13384,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "60894ed74fb050c759ce5e0060387fe137242d743134427e246adae2db54bd82",
+      "bytes": 13561,
+      "labels": [
+        {
+          "name": "civics-extraction-compact",
+          "version": 3
+        }
+      ]
+    },
+    {
+      "hash": "654ca747c8d7e641d342da32cec847e04f0db4dae8c41186ffc891207986fbd3",
+      "bytes": 529,
+      "labels": [
+        {
+          "name": "document-analysis-petition",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "6b8f42027f396d9f849fcf7db34a8ec2c404dee0c6bcc2dc8f1323926de49928",
+      "bytes": 950,
+      "labels": [
+        {
+          "name": "document-analysis-proposition",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "77a7de8887bc7b53c082e82e43a4aaad80490423849ae6189c31c8508bc05bf6",
+      "bytes": 2230,
+      "labels": [
+        {
+          "name": "structural-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "78e7e0d3ec8f4cec8933f084de81fed738d9d0ad82ff1a17028e8e2775aa75ae",
+      "bytes": 485,
+      "labels": [
+        {
+          "name": "ocr-transcription",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "806ebb1d0585fa06f2e4dfc6d42fa6ff4b83bc04e4893e25a5cd7bd2bc5668ed",
+      "bytes": 223,
+      "labels": [
+        {
+          "name": "document-analysis-generic",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "823e89098a553d2f027d8b22f6022e560c6e41ec838cabaacf833851cef9dcb0",
+      "bytes": 3852,
+      "labels": [
+        {
+          "name": "document-analysis-representative-committees-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "833edcbb6b450f3afb329238c182f09b1ec652f70ed15641e378e6c394149255",
+      "bytes": 11037,
+      "labels": [
+        {
+          "name": "document-analysis-representative-bio",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "850bdd19629b0896b7d3079770050b5e093ddf20d1c838572455474dc81f9df0",
+      "bytes": 7858,
+      "labels": [
+        {
+          "name": "document-analysis-proposition-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "87aa5de72b79bc90a6ad1ceefb63abb24ae1518923579c2b5bb2e65d7d97b5ef",
+      "bytes": 58,
+      "labels": [
+        {
+          "name": "pdf-text-rules-fields-propositions",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "8d8c6024c03ae59883cc77038020dfb9b5040090c53d881e67647aa04ec8cf95",
+      "bytes": 1043,
+      "labels": [
+        {
+          "name": "rag",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "94a535cde9d4546abc0c12291380fbfc7093f800a9fc669e77b772b738890581",
+      "bytes": 59,
+      "labels": [
+        {
+          "name": "document-analysis-base-instructions",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "99230ee4ba37be10098ab824517645afe3d4ef7260e2bdb90e5830d2e501000e",
+      "bytes": 366,
+      "labels": [
+        {
+          "name": "structural-schema-meetings",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "9cc97a5e8baa28cd53b8abeab199585cc7496d4ef346eeed3c288334a5d0b8de",
+      "bytes": 630,
+      "labels": [
+        {
+          "name": "structural-schema-lobbying",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "9cfd8c552bfcbe6e4727834d3bb26e05986b018a3db738345587f777abadf8a7",
+      "bytes": 866,
+      "labels": [
+        {
+          "name": "document-analysis-form",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "a1505d3f747d482e7d1357abbae7ca1d1c8e4066495ad936aed5acdea6dc929f",
+      "bytes": 576,
+      "labels": [
+        {
+          "name": "structural-schema-representatives",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "a449f6a14b8bbf62e24f6aa64e726edc03f00f9b8fbb8a2da6bda076041150ae",
+      "bytes": 17381,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 5
+        }
+      ]
+    },
+    {
+      "hash": "a96ebc626ffbe2a58325d7780d6bb8e4281b729f2ee4ffa7b728d7f6dfffdec7",
+      "bytes": 8152,
+      "labels": [
+        {
+          "name": "bill-analysis",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "ac0e63ebe039773a78964b032a0970d2d1cedc78ce453bc6febf5afb762b997d",
+      "bytes": 8682,
+      "labels": [
+        {
+          "name": "document-analysis-proposition-analysis",
+          "version": 2
+        },
+        {
+          "name": "document-analysis-proposition-analysis-quoted",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "b073dee7e7d7910e7e05567f28e984fb89cd94caec44fd3eed48f5cf73a9d734",
+      "bytes": 8049,
+      "labels": [
+        {
+          "name": "bill-relevance-explanation",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "b53baffef183461e487923e454247594acda3d9a677a33bdd753c2fea5769ea2",
+      "bytes": 8062,
+      "labels": [
+        {
+          "name": "bill-extraction",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "b7c2c5ad404a151fb285633ce8aae92172b024b108490526278307d7ae1c43f7",
+      "bytes": 48,
+      "labels": [
+        {
+          "name": "pdf-text-rules-fields-representatives",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "b8c9cbaa792159e24afe958173fc2bacb2a30084d14a9073aea4d12ed1706458",
+      "bytes": 14947,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "hash": "ba5c5352df2599e4f4bbb17d2789d6e88005b1813e4f4caabf54cc0ec935b777",
+      "bytes": 5769,
+      "labels": [
+        {
+          "name": "document-analysis-representative-activity-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "c4c7219319fa531dd044bc0ae7d2355b14ee9ec4b764b888ff64a7e46db01a09",
+      "bytes": 13718,
+      "labels": [
+        {
+          "name": "document-analysis-representative-bio",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "hash": "c5dc8bfb95f9600f7d1d5804ad1abb430febeb8271155d8d5ec655b5af72e82f",
+      "bytes": 1144,
+      "labels": [
+        {
+          "name": "document-analysis-petition",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "c7ea157d2dafe21ef979a83d86dae2d4b6ea6ef5c45bbda8c4fea9fd07aaffd5",
+      "bytes": 421,
+      "labels": [
+        {
+          "name": "structural-schema-propositions",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "cbaee18951ebb92960bbbab32922968ba0255dbfe0ee4dd50c8db58123cc6981",
+      "bytes": 15489,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 3
+        }
+      ]
+    },
+    {
+      "hash": "cc5801bbb782c9333b1688b62d477e557909deec47c41ea56b407a5a00a46899",
+      "bytes": 2686,
+      "labels": [
+        {
+          "name": "document-analysis-petition",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "hash": "d183fa36f6ffbd44819daf10cdd3b6dd479ef7204426b109859e4451cb993923",
+      "bytes": 9934,
+      "labels": [
+        {
+          "name": "bill-status-summary",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "d62e7b0a144bafa1192fbb5c059f31250052b50b572c05c3d839bc98acde3cb7",
+      "bytes": 9882,
+      "labels": [
+        {
+          "name": "document-analysis-proposition-analysis",
+          "version": 3
+        }
+      ]
+    },
+    {
+      "hash": "d71560390e8ccafc9ebd63a34f8f63925066be5a1c4666379558f3e883d71e65",
+      "bytes": 7650,
+      "labels": [
+        {
+          "name": "document-analysis-representative-committees-summary",
+          "version": 7
+        }
+      ]
+    },
+    {
+      "hash": "d793e229c4555d70bdc6da0626ad23ecc9573987a7336648eb1c768817d9eeaf",
+      "bytes": 6081,
+      "labels": [
+        {
+          "name": "bill-votes-extraction",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "d8cec07ff987ef2345f1f1d2948a3763667d0f695956d7f5243e609961d0e36d",
+      "bytes": 9980,
+      "labels": [
+        {
+          "name": "document-analysis-proposition-analysis",
+          "version": 4
+        }
+      ]
+    },
+    {
+      "hash": "dbb2c69308efa2278086f37105eea31095f35ec6d76a7d548287ba55bf3de224",
+      "bytes": 8409,
+      "labels": [
+        {
+          "name": "proposition-relevance-explanation",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "dca98f4ef68ebe0f1d4ce18f8a699b1dc366e30f691d7b939a84a85c12401817",
+      "bytes": 525,
+      "labels": [
+        {
+          "name": "document-analysis-contract",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "ea8a4844852b50a7ca9282bbaabeb65cfe1cc07990fef967c5612a111e900f31",
+      "bytes": 7723,
+      "labels": [
+        {
+          "name": "committee-relevance-explanation",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "f17b241f6fc632066a1f2fce00dd4ab6bdbda2e1b0211b4dbf53f4c769dfdfa6",
+      "bytes": 410,
+      "labels": [
+        {
+          "name": "document-analysis-form",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "f26c2efbe91d1851a66de4261f986954c5765a48e26f0a4a5068eb2fefdb6b63",
+      "bytes": 7917,
+      "labels": [
+        {
+          "name": "bill-extraction",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "f2f48f53c279711aab26094cff63ad6cb05e3fb778a9056a99c93f120b8bb756",
+      "bytes": 48,
+      "labels": [
+        {
+          "name": "pdf-text-rules-fields-default",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "hash": "f334bc8d3c2e8bd16d34f7a0c4d9355a20cfd7db880838671b2868ab211f73ef",
+      "bytes": 13019,
+      "labels": [
+        {
+          "name": "civics-extraction-compact",
+          "version": 1
+        },
+        {
+          "name": "civics-extraction-compact",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "hash": "f5f8e41ff6cc48c29d52b30e35134ca9ad629f80a12c055272eb587eeea88b63",
+      "bytes": 18002,
+      "labels": [
+        {
+          "name": "civics-extraction",
+          "version": 6
+        }
+      ]
+    },
+    {
+      "hash": "fb0fc9d90a69ec07f75103d9f8c808d22a4db826f424fe8d620a86a98ca46a54",
+      "bytes": 644,
+      "labels": [
+        {
+          "name": "structural-schema-campaign_finance",
+          "version": 1
+        }
+      ]
+    }
+  ]
+}

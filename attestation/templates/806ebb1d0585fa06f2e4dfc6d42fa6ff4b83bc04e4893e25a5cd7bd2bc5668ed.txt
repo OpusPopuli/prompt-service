@@ -1,0 +1,11 @@
+Analyze this document and extract key information.
+
+DOCUMENT:
+{{TEXT}}
+
+Respond with JSON:
+{
+  "summary": "2-3 sentence summary",
+  "keyPoints": ["Key point 1", "Key point 2"],
+  "entities": ["Person/org/place mentioned"]
+}

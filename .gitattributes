@@ -1,0 +1,6 @@
+# The prompt attestation record (opuspopuli#1450). Each template file is named
+# by the sha256 of its bytes, so git must never rewrite them: no line-ending
+# conversion, no text normalisation. Deliberately NOT linguist-generated — a
+# newly published prompt text is exactly what a reviewer should see in a diff.
+attestation/templates/*.txt -text
+attestation/manifest.json -text

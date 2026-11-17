@@ -1,0 +1,10 @@
+Each lobbying filing has:
+- externalId (required): Unique filing identifier
+- lobbyistName (required): Full name of the lobbyist
+- firmName (optional): Lobbying firm name
+- clientName (required): Name of the client being represented
+- activityDescription (optional): Description of lobbying activity
+- amount (optional): Reported compensation or expenditure amount as a number
+- periodStart (optional): Start date of the reporting period (use date_parse transform)
+- periodEnd (optional): End date of the reporting period (use date_parse transform)
+- filingDate (optional): Date the filing was submitted (use date_parse transform)

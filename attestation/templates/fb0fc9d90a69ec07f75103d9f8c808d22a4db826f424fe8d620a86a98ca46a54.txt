@@ -1,0 +1,11 @@
+Each campaign finance contribution record has:
+- externalId (required): Unique contribution identifier
+- committeeId (required): Recipient committee identifier
+- donorName (required): Full name of the donor
+- donorEmployer (optional): Donor's employer
+- donorOccupation (optional): Donor's occupation
+- donorCity (optional): Donor's city
+- donorState (optional): Donor's state (two-letter abbreviation)
+- amount (required): Contribution amount as a number (use numeric extraction or regex)
+- date (required): Date of contribution (use date_parse transform)
+- donorType (optional): Type of donor (e.g., "individual", "committee", "organization")

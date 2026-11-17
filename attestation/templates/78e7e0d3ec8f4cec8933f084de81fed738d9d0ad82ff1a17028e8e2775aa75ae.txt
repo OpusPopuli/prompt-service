@@ -1,0 +1,8 @@
+Transcribe all readable text from this photograph of a document, verbatim and in reading order.
+
+Rules:
+- Transcribe exactly what is printed. Do not summarise, explain, or add commentary.
+- Do not correct apparent errors, spelling, or grammar in the source text.
+- If a region is illegible, skip it rather than guessing at the words.
+- Do not describe the image, the paper, or anything that is not printed text.
+- Output the transcription only, with no preamble and no closing remarks.

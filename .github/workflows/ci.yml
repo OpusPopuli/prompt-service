@@ -41,6 +41,18 @@ jobs:
       - name: Run linting
         run: pnpm lint
 
+      # The prompt attestation record is append-only (opuspopuli#1450): an
+      # output's receipt must still resolve after its prompt is revised. The
+      # test suite verifies one version of the record; only a comparison with
+      # the base can catch an entry deleted together with its file.
+      - name: Verify the attestation record is append-only
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
+          pnpm attestation:check --base FETCH_HEAD
+
   test:
     name: Test
     runs-on: ubuntu-latest

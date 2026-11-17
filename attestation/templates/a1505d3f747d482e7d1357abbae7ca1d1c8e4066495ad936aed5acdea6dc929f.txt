@@ -1,0 +1,8 @@
+Each representative/legislator has:
+- externalId (required): Unique identifier (e.g., "ca-assembly-30")
+- name (required): Full name of the representative (use name_format transform if "Last, First")
+- chamber (optional): Legislative chamber (e.g., "Assembly", "Senate")
+- district (required): District identifier (e.g., "District 30")
+- party (required): Political party (Democratic, Republican, Independent)
+- photoUrl (optional): URL to profile photo (attribute extraction on img src)
+- contactInfo.website (optional): Profile page URL (attribute extraction on anchor href)
