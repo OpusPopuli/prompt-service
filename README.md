@@ -303,4 +303,6 @@ The open-source `prompt-client` package connects to this service when `PROMPT_SE
 
 ## License
 
-UNLICENSED — Private and proprietary. Not for distribution.
+GNU Affero General Public License v3.0 (AGPL-3.0) - See [LICENSE](LICENSE) file for details.
+
+This matches the rest of Opus Populi. For commercial licensing options, see [LICENSE-COMMERCIAL.md](https://github.com/OpusPopuli/opuspopuli/blob/main/LICENSE-COMMERCIAL.md) in the main repository.

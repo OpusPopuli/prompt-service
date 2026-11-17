@@ -4,7 +4,7 @@
   "packageManager": "pnpm@9.15.9",
   "description": "Open-source AI prompt service \u2014 publishes and serves versioned prompt templates to federated Opus Populi nodes",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0",
   "scripts": {
     "build": "nest build",
     "start": "nest start",
